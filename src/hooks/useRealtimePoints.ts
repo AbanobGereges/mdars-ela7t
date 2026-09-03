@@ -104,7 +104,7 @@ export function useRealtimePoints(): RealtimePointsState {
 
       // 1. Build ChildLeaderboardEntry array
       const childEntries: ChildLeaderboardEntry[] = rawChildren
-        .filter((c) => c.is_active)
+        .filter((c) => c.is_active !== false)
         .map((c) => ({
           child: c,
           pointsToday: childPointsTodayMap.get(c.id) || 0,
@@ -133,9 +133,9 @@ export function useRealtimePoints(): RealtimePointsState {
 
       // 2. Build FamilyLeaderboardEntry array
       const familyEntries: FamilyLeaderboardEntry[] = rawFamilies
-        .filter((f) => f.is_active)
+        .filter((f) => f.is_active !== false)
         .map((f) => {
-          const count = rawChildren.filter((c) => c.family_id === f.id && c.is_active).length;
+          const count = rawChildren.filter((c) => c.family_id === f.id && c.is_active !== false).length;
           const kidsPts = familyChildrenPointsTodayMap.get(f.id) || 0;
           const directPts = familyDirectPointsTodayMap.get(f.id) || 0;
           const totalPts = familyPointsTodayMap.get(f.id) || 0;
