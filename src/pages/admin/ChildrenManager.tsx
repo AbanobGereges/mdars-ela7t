@@ -30,14 +30,25 @@ export const ChildrenManager: React.FC = () => {
     setLoading(true);
     try {
       const [chRes, famRes, stgRes] = await Promise.all([
-        supabase.from('children').select('*, stage:stages(*), family:families(*)').order('full_name'),
+        supabase.from('children').select('*').order('full_name'),
         supabase.from('families').select('*').eq('is_active', true).order('name'),
         supabase.from('stages').select('*').eq('is_active', true).order('sort_order'),
       ]);
 
-      if (chRes.data) setChildren(chRes.data as Child[]);
-      if (famRes.data) setFamilies(famRes.data as Family[]);
-      if (stgRes.data) setStages(stgRes.data as Stage[]);
+      const stagesData = (stgRes.data as Stage[]) || [];
+      const famsData = (famRes.data as Family[]) || [];
+
+      if (stgRes.data) setStages(stagesData);
+      if (famRes.data) setFamilies(famsData);
+
+      if (chRes.data) {
+        const linkedChildren = (chRes.data as Child[]).map((c) => ({
+          ...c,
+          family: famsData.find((f) => f.id === c.family_id),
+          stage: stagesData.find((s) => s.id === c.stage_id),
+        }));
+        setChildren(linkedChildren);
+      }
     } catch (err) {
       console.error('Error loading children data:', err);
     } finally {

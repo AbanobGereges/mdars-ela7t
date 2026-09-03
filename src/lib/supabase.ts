@@ -19,8 +19,14 @@ export function cleanSupabaseUrl(raw: string): string {
   }
 }
 
-const supabaseUrl: string = import.meta.env?.VITE_SUPABASE_URL || '';
-const supabaseAnonKey: string = import.meta.env?.VITE_SUPABASE_ANON_KEY || '';
+const envUrl: string = import.meta.env?.VITE_SUPABASE_URL || '';
+const envKey: string = import.meta.env?.VITE_SUPABASE_ANON_KEY || '';
+
+const localUrl: string = typeof window !== 'undefined' ? localStorage.getItem('CHURCH_SUPABASE_URL') || '' : '';
+const localKey: string = typeof window !== 'undefined' ? localStorage.getItem('CHURCH_SUPABASE_KEY') || '' : '';
+
+const supabaseUrl: string = envUrl || localUrl;
+const supabaseAnonKey: string = envKey || localKey;
 
 const cleanedUrl = cleanSupabaseUrl(supabaseUrl);
 

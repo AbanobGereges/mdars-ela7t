@@ -40,20 +40,36 @@ export const AuditLogs: React.FC = () => {
   const fetchLogs = async () => {
     setLoading(true);
     try {
-      const [logsRes, stgsRes, famsRes, servRes] = await Promise.all([
-        supabase
-          .from('point_logs')
-          .select('*, child:children(*), family:families(*), stage:stages(*), servant:profiles(*), rule:point_rules(*)')
-          .order('created_at', { ascending: false }),
+      const [logsRes, stgsRes, famsRes, servRes, kidsRes, rulesRes] = await Promise.all([
+        supabase.from('point_logs').select('*').order('created_at', { ascending: false }),
         supabase.from('stages').select('*').order('sort_order'),
         supabase.from('families').select('*').order('name'),
         supabase.from('profiles').select('*').order('full_name'),
+        supabase.from('children').select('*'),
+        supabase.from('point_rules').select('*'),
       ]);
 
-      if (logsRes.data) setLogs(logsRes.data as PointLog[]);
-      if (stgsRes.data) setStages(stgsRes.data as Stage[]);
-      if (famsRes.data) setFamilies(famsRes.data as Family[]);
-      if (servRes.data) setServants(servRes.data as Profile[]);
+      const stagesData = (stgsRes.data as Stage[]) || [];
+      const famsData = (famsRes.data as Family[]) || [];
+      const servData = (servRes.data as Profile[]) || [];
+      const kidsData = (kidsRes.data as Child[]) || [];
+      const rulesData = (rulesRes.data as PointRule[]) || [];
+
+      setStages(stagesData);
+      setFamilies(famsData);
+      setServants(servData);
+
+      if (logsRes.data) {
+        const enrichedLogs: PointLog[] = (logsRes.data as PointLog[]).map((l) => ({
+          ...l,
+          child: kidsData.find((c) => c.id === l.child_id) || null,
+          family: famsData.find((f) => f.id === l.family_id) || null,
+          stage: stagesData.find((s) => s.id === l.stage_id) || null,
+          servant: servData.find((p) => p.id === l.servant_id) || null,
+          rule: rulesData.find((r) => r.id === l.rule_id) || null,
+        }));
+        setLogs(enrichedLogs);
+      }
     } catch (err) {
       console.error('Error fetching logs:', err);
     } finally {

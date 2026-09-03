@@ -40,18 +40,36 @@ export const FamiliesManager: React.FC = () => {
     setLoading(true);
     try {
       const [famsRes, stgsRes, servRes, fsRes, chRes] = await Promise.all([
-        supabase.from('families').select('*, stage:stages(*)').order('name'),
+        supabase.from('families').select('*').order('name'),
         supabase.from('stages').select('*').eq('is_active', true).order('sort_order'),
         supabase.from('profiles').select('*').eq('role', 'servant').eq('is_approved', true),
-        supabase.from('family_servants').select('*, servant:profiles(*)'),
+        supabase.from('family_servants').select('*'),
         supabase.from('children').select('*'),
       ]);
 
-      if (famsRes.data) setFamilies(famsRes.data as Family[]);
-      if (stgsRes.data) setStages(stgsRes.data as Stage[]);
-      if (servRes.data) setServants(servRes.data as Profile[]);
-      if (fsRes.data) setFamilyServants(fsRes.data as FamilyServant[]);
+      const stagesData = (stgsRes.data as Stage[]) || [];
+      const servantsData = (servRes.data as Profile[]) || [];
+      const fsData = (fsRes.data as FamilyServant[]) || [];
+
+      if (stgsRes.data) setStages(stagesData);
+      if (servRes.data) setServants(servantsData);
       if (chRes.data) setChildren(chRes.data as Child[]);
+
+      if (fsRes.data) {
+        const enrichedFs = fsData.map((fs) => ({
+          ...fs,
+          servant: servantsData.find((s) => s.id === fs.servant_id),
+        }));
+        setFamilyServants(enrichedFs);
+      }
+
+      if (famsRes.data) {
+        const enrichedFams = (famsRes.data as Family[]).map((f) => ({
+          ...f,
+          stage: stagesData.find((s) => s.id === f.stage_id),
+        }));
+        setFamilies(enrichedFams);
+      }
     } catch (err) {
       console.error('Error fetching families:', err);
     } finally {

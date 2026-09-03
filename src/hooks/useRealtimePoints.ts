@@ -158,35 +158,66 @@ export function useRealtimePoints(): RealtimePointsState {
     }
 
     try {
-      // Parallel fetch of children, families, and point logs
-      const [childrenRes, familiesRes, logsRes] = await Promise.all([
-        supabase
-          .from('children')
-          .select('*, stage:stages(*), family:families(*)')
-          .order('full_name'),
-        supabase
-          .from('families')
-          .select('*, stage:stages(*)')
-          .order('name'),
-        supabase
-          .from('point_logs')
-          .select('*, child:children(*), family:families(*), stage:stages(*), servant:profiles(*), rule:point_rules(*)')
-          .order('created_at', { ascending: false }),
+      // Parallel fetch of children, families, stages, rules, logs, and profiles independently
+      // This prevents PostgREST relationship ambiguity errors (e.g. multiple foreign keys to profiles in point_logs)
+      const [childrenRes, familiesRes, stagesRes, rulesRes, logsRes, profilesRes] = await Promise.all([
+        supabase.from('children').select('*').order('full_name'),
+        supabase.from('families').select('*').order('name'),
+        supabase.from('stages').select('*').order('sort_order'),
+        supabase.from('point_rules').select('*').order('points', { ascending: false }),
+        supabase.from('point_logs').select('*').order('created_at', { ascending: false }),
+        supabase.from('profiles').select('*').order('created_at'),
       ]);
 
-      if (childrenRes.error) throw childrenRes.error;
-      if (familiesRes.error) throw familiesRes.error;
-      if (logsRes.error) throw logsRes.error;
+      if (childrenRes.error) {
+        console.warn('children fetch error:', childrenRes.error);
+        throw childrenRes.error;
+      }
+      if (familiesRes.error) {
+        console.warn('families fetch error:', familiesRes.error);
+        throw familiesRes.error;
+      }
+      if (logsRes.error) {
+        console.warn('point_logs fetch error:', logsRes.error);
+        throw logsRes.error;
+      }
 
-      calculatePoints(
-        childrenRes.data || [],
-        familiesRes.data || [],
-        logsRes.data || []
-      );
+      const stages = stagesRes.data || [];
+      const rules = rulesRes.data || [];
+      const profiles = profilesRes.data || [];
+
+      // Link stages to families
+      const families: (Family & { stage?: Stage })[] = (familiesRes.data || []).map((f) => ({
+        ...f,
+        stage: stages.find((s) => s.id === f.stage_id) || undefined,
+      }));
+
+      // Link families & stages to children
+      const childrenList: (Child & { stage?: Stage; family?: Family })[] = (childrenRes.data || []).map((c) => ({
+        ...c,
+        family: families.find((f) => f.id === c.family_id) || undefined,
+        stage: stages.find((s) => s.id === c.stage_id) || undefined,
+      }));
+
+      // Enrich point_logs with full relations in memory
+      const logsList: PointLog[] = (logsRes.data || []).map((l) => ({
+        ...l,
+        child: childrenList.find((c) => c.id === l.child_id) || null,
+        family: families.find((f) => f.id === l.family_id) || null,
+        stage: stages.find((s) => s.id === l.stage_id) || null,
+        servant: profiles.find((p) => p.id === l.servant_id) || null,
+        rule: rules.find((r) => r.id === l.rule_id) || null,
+      }));
+
+      calculatePoints(childrenList, families, logsList);
       setError(null);
     } catch (err: unknown) {
       console.error('Error in useRealtimePoints fetch:', err);
-      setError(err instanceof Error ? err.message : 'حدث خطأ في جلب بيانات النقاط');
+      const postgrestMsg =
+        err && typeof err === 'object' && 'message' in err
+          ? String((err as { message: unknown }).message)
+          : null;
+      setError(postgrestMsg || (err instanceof Error ? err.message : 'حدث خطأ في جلب بيانات النقاط'));
     } finally {
       setLoading(false);
     }
