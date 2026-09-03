@@ -67,8 +67,10 @@ export const ServantHome: React.FC = () => {
       const child = entry.child;
 
       // Servant access control: must be in assigned families (unless admin)
-      if (role === 'servant' && !assignedFamilies.includes(child.family_id)) {
-        return false;
+      if (role === 'servant' && assignedFamilies && assignedFamilies.length > 0) {
+        if (!assignedFamilies.includes(child.family_id)) {
+          return false;
+        }
       }
 
       // Tab filter
