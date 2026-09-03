@@ -1,0 +1,33 @@
+{
+  "name": "كنيسة العذراء وبولس - مدارس الأحد",
+  "short_name": "مدارس الأحد",
+  "description": "تطبيق خدمة مدارس الأحد - كنيسة السيدة العذراء مريم والقديس بولس الرسول بالحضرة الجديدة",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#8b1115",
+  "theme_color": "#8b1115",
+  "dir": "rtl",
+  "lang": "ar",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "church-logo.jpg",
+      "sizes": "192x192 512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "church-logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

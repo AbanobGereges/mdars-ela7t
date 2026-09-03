@@ -1,0 +1,3383 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>كنيسة العذراء والأنبا بولس — خدمة مدارس الأحد</title>
+  
+  <!-- PWA & Mobile App Icons & Meta Tags -->
+  <link rel="icon" type="image/jpeg" href="church-logo.jpg" />
+  <link rel="icon" type="image/svg+xml" href="church-logo.svg" />
+  <link rel="shortcut icon" href="church-logo.jpg" />
+  <link rel="apple-touch-icon" href="church-logo.jpg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="church-logo.jpg" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#8b1115" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="مدارس الأحد" />
+
+  <!-- Google Fonts: Cairo -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            church: {
+              50: '#fbf7ee',
+              100: '#f5edd6',
+              200: '#ebd9ad',
+              300: '#dec07e',
+              400: '#d0a753',
+              500: '#b88936',
+              600: '#9b6c2a',
+              700: '#7a5124',
+              800: '#654223',
+              900: '#553720',
+              950: '#301c10',
+            }
+          },
+          fontFamily: {
+            cairo: ['Cairo', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Supabase JS Client via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Canvas Confetti via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.4/dist/confetti.browser.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-[#fbf7ee] text-slate-800 min-h-screen antialiased selection:bg-church-200">
+
+  <!-- APP ROOT CONTAINER -->
+  <div id="app-root">
+    <!-- Initial Loading Fallback -->
+    <div class="min-h-screen flex flex-col items-center justify-center p-4 gap-3 text-center">
+      <img src="church-logo.jpg" onerror="this.onerror=null; this.src='church-logo.svg';" class="w-24 h-24 rounded-full shadow-xl border-2 border-amber-500 object-cover mx-auto animate-pulse" alt="شعار كنيسة العذراء وبولس" />
+      <div class="w-10 h-10 border-4 border-amber-300 border-t-amber-600 rounded-full animate-spin mx-auto mt-2"></div>
+      <div class="text-xl font-black text-amber-950">كنيسة السيدة العذراء والشهيد ماربولس</div>
+      <p class="text-xs text-church-700 font-bold">خدمة مدارس الأحد — الحضرة الجديدة</p>
+      <div id="loading-timeout-hint" class="hidden flex flex-col items-center gap-2 mt-2">
+        <p class="text-[11px] text-slate-400">إذا استغرقت الشاشة وقتاً:</p>
+        <button onclick="localStorage.clear(); location.reload();" class="px-4 py-2 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 font-bold text-xs border border-amber-300 shadow-sm transition-all active:scale-95">
+          🔄 إعادة المحاولة / ضبط الإعدادات
+        </button>
+      </div>
+    </div>
+  </div>
+  <script>
+    setTimeout(function() {
+      var hint = document.getElementById('loading-timeout-hint');
+      if (hint) hint.classList.remove('hidden');
+    }, 3500);
+  </script>
+
+  <script>
+    // Global Error Trap to PREVENT any White Screen
+    window.onerror = function(msg, url, lineNo, columnNo, error) {
+      console.error('Global uncaught error caught:', msg, error);
+      const root = document.getElementById('app-root');
+      if (root) {
+        root.innerHTML = `
+          <div class="min-h-screen flex items-center justify-center p-4 bg-[#fbf7ee]" dir="rtl">
+            <div class="bg-white max-w-lg w-full rounded-3xl p-6 border border-rose-300 shadow-2xl space-y-4 text-right">
+              <div class="w-12 h-12 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center text-2xl mx-auto font-bold">⚠️</div>
+              <h2 class="text-xl font-black text-rose-950 text-center">تنبيه أثناء تشغيل الواجهة</h2>
+              <p class="text-xs text-slate-600 font-mono bg-rose-50 p-3 rounded-xl border border-rose-200" dir="ltr">${msg}</p>
+              <div class="flex gap-2">
+                <button onclick="location.reload()" class="flex-1 py-2.5 bg-church-600 text-white rounded-xl text-xs font-bold">
+                  إعادة المحاولة
+                </button>
+                <button onclick="localStorage.clear(); location.reload();" class="px-4 py-2.5 border border-slate-300 text-slate-700 rounded-xl text-xs font-bold">
+                  إعادة ضبط الإعدادات
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    };
+
+    window.addEventListener('unhandledrejection', function(event) {
+      console.warn('Unhandled Promise Rejection:', event.reason);
+    });
+
+    // ===========================================================================
+    // 1. SUPABASE CLIENT & STATE INITIALIZATION
+    // ===========================================================================
+    var supabaseClient = null;
+    var currentUser = null;
+    var currentProfile = null;
+    var currentRole = null;
+    var assignedFamilyIds = [];
+    var currentAdminTab = 'dashboard'; // 'dashboard' | 'users' | 'stages' | 'families' | 'children' | 'rules' | 'audit'
+    var currentServantTab = 'kids'; // 'kids' | 'history'
+    var isDisplayOnlyMode = false;
+
+    // Realtime Cache
+    var cacheChildren = [];
+    var cacheFamilies = [];
+    var cacheStages = [];
+    var cacheRules = [];
+    var cacheLogs = [];
+    var cacheProfiles = [];
+    var cacheFamilyServants = [];
+    var realtimeChannel = null;
+    var realtimeSyncDebounceTimer = null;
+    var isRealtimeConnected = false;
+
+    // Web Audio Synthesizer
+    class SoundManager {
+      constructor() {
+        this.ctx = null;
+      }
+      init() {
+        if (!this.ctx) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (AudioCtx) this.ctx = new AudioCtx();
+        }
+        if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+      }
+      playSuccess() {
+        try {
+          this.init();
+          if (!this.ctx) return;
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(523.25, now);
+          osc.frequency.exponentialRampToValueAtTime(783.99, now + 0.15);
+          osc.frequency.exponentialRampToValueAtTime(1046.50, now + 0.3);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.4);
+        } catch(e) {}
+      }
+      playDeduct() {
+        try {
+          this.init();
+          if (!this.ctx) return;
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(440, now);
+          osc.frequency.exponentialRampToValueAtTime(260, now + 0.25);
+          gain.gain.setValueAtTime(0.15, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.3);
+        } catch(e) {}
+      }
+    }
+    const sounds = new SoundManager();
+
+    function triggerConfetti() {
+      if (typeof confetti === 'function') {
+        confetti({
+          particleCount: 90,
+          spread: 80,
+          origin: { y: 0.6 },
+          colors: ['#d0a753', '#b88936', '#3377fc', '#10b981', '#f59e0b']
+        });
+      }
+    }
+
+    function getSupabaseLib() {
+      if (window.supabase && typeof window.supabase.createClient === 'function') {
+        return window.supabase;
+      }
+      return null;
+    }
+
+    function cleanSupabaseUrl(raw) {
+      if (!raw) return '';
+      let url = raw.trim();
+
+      const dashboardMatch = url.match(/supabase\.com\/dashboard\/project\/([a-zA-Z0-9_-]+)/);
+      if (dashboardMatch && dashboardMatch[1]) {
+        return `https://${dashboardMatch[1]}.supabase.co`;
+      }
+
+      if (!/^https?:\/\//i.test(url)) {
+        url = 'https://' + url;
+      }
+
+      try {
+        const parsed = new URL(url);
+        return parsed.origin;
+      } catch (e) {
+        return url.replace(/\/+$/, '');
+      }
+    }
+
+    const DEFAULT_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indib3phYmN1YXBxemZraXR5eWdmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgzNjEzOTMsImV4cCI6MjEwMzkzNzM5M30.iPPxVZu3dNfEUYMQWUr3qOq4A1FfqlYEndJB9pjPIKc';
+    const DEFAULT_SUPABASE_URL = 'https://wbozabcuapqzfkityygf.supabase.co';
+
+    function initSupabase() {
+      let key = localStorage.getItem('CHURCH_SUPABASE_KEY') || DEFAULT_SUPABASE_KEY;
+      if (!key || key.includes('dummy') || key.includes('placeholder')) key = DEFAULT_SUPABASE_KEY;
+      key = key.trim();
+
+      // Automatically extract the exact project ref from the JWT payload to eliminate any typo
+      let derivedUrl = DEFAULT_SUPABASE_URL;
+      try {
+        const parts = key.split('.');
+        if (parts.length >= 2) {
+          const payload = JSON.parse(atob(parts[1]));
+          if (payload && payload.ref) {
+            derivedUrl = `https://${payload.ref}.supabase.co`;
+          }
+        }
+      } catch (e) {
+        console.warn('JWT ref extract warning:', e);
+      }
+
+      let url = localStorage.getItem('CHURCH_SUPABASE_URL');
+      if (!url || url.includes('xyz') || url.includes('placeholder') || url.includes('fkkityygf')) {
+        url = derivedUrl;
+      }
+      url = cleanSupabaseUrl(url);
+
+      // Persist the clean, verified URL and key in localStorage
+      localStorage.setItem('CHURCH_SUPABASE_URL', url);
+      localStorage.setItem('CHURCH_SUPABASE_KEY', key);
+
+      const lib = getSupabaseLib();
+      if (url && key && lib) {
+        try {
+          supabaseClient = lib.createClient(url, key);
+          console.info('Supabase initialized successfully with endpoint:', url);
+          return true;
+        } catch (e) {
+          console.error('Init error:', e);
+          return false;
+        }
+      }
+      return false;
+    }
+
+    async function waitForSupabaseLib(maxRetries = 30, delayMs = 100) {
+      for (let i = 0; i < maxRetries; i++) {
+        if (getSupabaseLib()) return true;
+        await new Promise(res => setTimeout(res, delayMs));
+      }
+      return !!getSupabaseLib();
+    }
+
+    // ===========================================================================
+    // 2. MAIN APPLICATION BOOTSTRAP
+    // ===========================================================================
+    async function initApp() {
+      await waitForSupabaseLib();
+      const configured = initSupabase();
+      if (!configured) {
+        renderConfigSetup();
+        return;
+      }
+
+      renderLoading('جاري التحقق من الجلسة والصلاحيات...');
+
+      try {
+        const sessionPromise = supabaseClient.auth.getSession();
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('Session check timeout')), 6000));
+        const { data: sessionData, error: sessionErr } = await Promise.race([sessionPromise, timeoutPromise]);
+        if (sessionErr) throw sessionErr;
+
+        if (sessionData && sessionData.session && sessionData.session.user) {
+          currentUser = sessionData.session.user;
+          await loadUserProfile(currentUser.id);
+        } else {
+          renderLogin();
+          return;
+        }
+      } catch (err) {
+        console.warn('Session check note:', err);
+        renderLogin();
+        return;
+      }
+
+      // Check approval
+      if (!currentProfile || !currentProfile.is_approved) {
+        renderUnapproved();
+        return;
+      }
+
+      // Setup Realtime & Load data with safe timeout
+      try {
+        await Promise.race([
+          loadAllData(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Data load timeout')), 8000))
+        ]);
+      } catch (e) {
+        console.warn('Initial loadAllData note:', e);
+      }
+
+      setupRealtime();
+
+      // Route based on role
+      if (isDisplayOnlyMode || currentRole === 'display') {
+        renderDisplayScreen();
+      } else if (currentRole === 'admin') {
+        renderAdminDashboard();
+      } else {
+        renderServantHome();
+      }
+    }
+
+    async function loadUserProfile(userId) {
+      try {
+        const { data, error } = await supabaseClient
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (data) {
+          currentProfile = data;
+          currentRole = data.role;
+
+          if (currentRole === 'servant') {
+            const { data: fs } = await supabaseClient
+              .from('family_servants')
+              .select('family_id')
+              .eq('servant_id', userId);
+            assignedFamilyIds = fs ? fs.map(item => item.family_id) : [];
+          } else if (currentRole === 'admin') {
+            const { data: fams } = await supabaseClient.from('families').select('id');
+            assignedFamilyIds = fams ? fams.map(f => f.id) : [];
+          }
+        } else {
+          const metaName = (currentUser.user_metadata && currentUser.user_metadata.full_name) || 'مستخدم جديد';
+          currentProfile = { id: userId, email: currentUser.email, full_name: metaName, role: 'servant', is_approved: false };
+          currentRole = 'servant';
+          try {
+            await supabaseClient.from('profiles').upsert(currentProfile, { onConflict: 'id' });
+          } catch (e) {
+            console.warn('Upsert profile fallback note:', e);
+          }
+        }
+      } catch (err) {
+        console.error('loadUserProfile error:', err);
+      }
+    }
+
+    async function loadAllData() {
+      if (!supabaseClient) return;
+      try {
+        const [chRes, famRes, stgRes, ruleRes, logRes, profRes, fsRes] = await Promise.all([
+          supabaseClient.from('children').select('*').order('full_name'),
+          supabaseClient.from('families').select('*').order('name'),
+          supabaseClient.from('stages').select('*').order('sort_order'),
+          supabaseClient.from('point_rules').select('*').order('points', { ascending: false }),
+          supabaseClient.from('point_logs').select('*').order('created_at', { ascending: false }),
+          supabaseClient.from('profiles').select('*').order('created_at'),
+          supabaseClient.from('family_servants').select('*')
+        ]);
+
+        if (logRes.error) console.error('[loadAllData] point_logs query error:', logRes.error);
+        if (chRes.error) console.error('[loadAllData] children query error:', chRes.error);
+        if (ruleRes.error) console.error('[loadAllData] point_rules query error:', ruleRes.error);
+
+        cacheStages = stgRes.data || [];
+        cacheFamilies = (famRes.data || []).map(f => ({
+          ...f,
+          stage: cacheStages.find(s => s.id === f.stage_id) || { name: '' }
+        }));
+        cacheChildren = (chRes.data || []).map(c => ({
+          ...c,
+          family: cacheFamilies.find(f => f.id === c.family_id) || { name: '' },
+          stage: cacheStages.find(s => s.id === c.stage_id) || { name: '' }
+        }));
+        cacheRules = ruleRes.data || [];
+        cacheProfiles = profRes.data || [];
+        cacheFamilyServants = fsRes.data || [];
+
+        // Enrich point_logs in memory so every log has full child, family, stage, servant
+        cacheLogs = (logRes.data || []).map(l => ({
+          ...l,
+          child: cacheChildren.find(c => c.id === l.child_id) || { full_name: 'طفل' },
+          family: cacheFamilies.find(f => f.id === l.family_id) || { name: '' },
+          stage: cacheStages.find(s => s.id === l.stage_id) || { name: '' },
+          servant: cacheProfiles.find(p => p.id === l.servant_id) || { full_name: 'خادم' }
+        }));
+
+        if (cacheFamilies && cacheFamilies.length > 0) {
+          try {
+            localStorage.setItem('CHURCH_CACHED_FAMILIES', JSON.stringify(cacheFamilies));
+          } catch(e) {}
+        }
+      } catch (err) {
+        console.error('Data loading error:', err);
+      }
+    }
+
+    // ===========================================================================
+    // REALTIME ENGINE (FINE-GRAINED STATE UPDATES & RECONNECT RESILIENCE)
+    // ===========================================================================
+    function teardownRealtime() {
+      if (realtimeChannel && supabaseClient) {
+        try {
+          supabaseClient.removeChannel(realtimeChannel);
+        } catch (err) {
+          console.warn('Realtime teardown error:', err);
+        }
+        realtimeChannel = null;
+      }
+      isRealtimeConnected = false;
+      updateRealtimeIndicator(false, 'غير متصل');
+    }
+
+    function updateRealtimeIndicator(isOnline, text) {
+      document.querySelectorAll('.realtime-indicator-badge').forEach(badge => {
+        badge.className = `realtime-indicator-badge inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold transition-all ${
+          isOnline ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-amber-50 border border-amber-200 text-amber-800'
+        }`;
+        badge.innerHTML = `
+          <span class="w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}"></span>
+          <span>${text || (isOnline ? 'بث مباشر Realtime' : 'جاري الاتصال...')}</span>
+        `;
+      });
+    }
+
+    function setupRealtime() {
+      if (!supabaseClient) return;
+
+      // Prevent duplicate channel subscriptions on re-render / tab switch
+      if (realtimeChannel) {
+        return;
+      }
+
+      console.log('⚡ Initializing Supabase Realtime Hub for 7 tables...');
+      updateRealtimeIndicator(false, 'جاري الاتصال بالبث المباشر...');
+
+      realtimeChannel = supabaseClient
+        .channel('church-system-realtime-hub', {
+          config: { broadcast: { self: true } }
+        })
+
+        // 1. POINT_LOGS TABLE (Points added / deducted / reverted)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'point_logs' }, (payload) => {
+          console.log('[Realtime point_logs]:', payload.eventType, payload);
+
+          if (payload.eventType === 'INSERT') {
+            const log = payload.new;
+            log.child = cacheChildren.find(c => c.id === log.child_id) || { full_name: 'طفل' };
+            log.family = cacheFamilies.find(f => f.id === log.family_id) || { name: '' };
+            log.stage = cacheStages.find(s => s.id === log.stage_id) || { name: '' };
+            log.servant = cacheProfiles.find(p => p.id === log.servant_id) || { full_name: 'خادم' };
+
+            const existIdx = cacheLogs.findIndex(l => l.id === log.id || (l.id.startsWith('temp-') && l.child_id === log.child_id && l.points === log.points));
+            if (existIdx >= 0) {
+              cacheLogs[existIdx] = log;
+            } else {
+              cacheLogs.unshift(log);
+              // Audio feedback for remote operations
+              if (log.servant_id !== currentUser?.id) {
+                if (log.points > 0) {
+                  sounds.playSuccess();
+                  triggerConfetti();
+                  showToast(`🎉 خادم سجّل ${log.points > 0 ? '+' + log.points : log.points} نقطة لـ (${log.child?.full_name || 'طفل'})`, true);
+                } else {
+                  sounds.playDeduct();
+                  showToast(`⚠️ خادم خصم ${Math.abs(log.points)} نقطة من (${log.child?.full_name || 'طفل'})`, false);
+                }
+              }
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedLog = payload.new;
+            const idx = cacheLogs.findIndex(l => l.id === updatedLog.id);
+            if (idx >= 0) {
+              cacheLogs[idx] = { ...cacheLogs[idx], ...updatedLog };
+            }
+          } else if (payload.eventType === 'DELETE') {
+            const delId = payload.old?.id;
+            cacheLogs = cacheLogs.filter(l => l.id !== delId);
+          }
+
+          refreshCurrentView();
+          scheduleBackgroundReconcile();
+        })
+
+        // 2. CHILDREN TABLE (Add, Edit, Transfer family/stage, Toggle active, Image change)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'children' }, (payload) => {
+          console.log('[Realtime children]:', payload.eventType, payload);
+
+          if (payload.eventType === 'INSERT') {
+            const newChild = payload.new;
+            newChild.family = cacheFamilies.find(f => f.id === newChild.family_id) || { name: '' };
+            newChild.stage = cacheStages.find(s => s.id === newChild.stage_id) || { name: '' };
+            const idx = cacheChildren.findIndex(c => c.id === newChild.id || (c.id.startsWith('child-') && c.full_name === newChild.full_name));
+            if (idx >= 0) {
+              cacheChildren[idx] = newChild;
+            } else {
+              cacheChildren.unshift(newChild);
+              showToast(`👶 تم تسجيل طفل جديد: (${newChild.full_name})`, true);
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedChild = payload.new;
+            updatedChild.family = cacheFamilies.find(f => f.id === updatedChild.family_id) || { name: '' };
+            updatedChild.stage = cacheStages.find(s => s.id === updatedChild.stage_id) || { name: '' };
+            const idx = cacheChildren.findIndex(c => c.id === updatedChild.id);
+            if (idx >= 0) {
+              cacheChildren[idx] = { ...cacheChildren[idx], ...updatedChild };
+            } else {
+              cacheChildren.unshift(updatedChild);
+            }
+
+            // Propagate updated child & family details to existing point_logs
+            cacheLogs.forEach(l => {
+              if (l.child_id === updatedChild.id) {
+                l.child = updatedChild;
+                l.family = updatedChild.family;
+                l.stage = updatedChild.stage;
+              }
+            });
+          } else if (payload.eventType === 'DELETE') {
+            const delId = payload.old?.id;
+            cacheChildren = cacheChildren.filter(c => c.id !== delId);
+            cacheLogs = cacheLogs.filter(l => l.child_id !== delId);
+          }
+
+          refreshCurrentView();
+          scheduleBackgroundReconcile();
+        })
+
+        // 3. FAMILIES TABLE (Add, Rename, Change stage, Delete)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'families' }, (payload) => {
+          console.log('[Realtime families]:', payload.eventType, payload);
+
+          if (payload.eventType === 'INSERT') {
+            const newFam = payload.new;
+            newFam.stage = cacheStages.find(s => s.id === newFam.stage_id) || { name: '' };
+            const idx = cacheFamilies.findIndex(f => f.id === newFam.id);
+            if (idx >= 0) cacheFamilies[idx] = newFam; else cacheFamilies.push(newFam);
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedFam = payload.new;
+            updatedFam.stage = cacheStages.find(s => s.id === updatedFam.stage_id) || { name: '' };
+            const idx = cacheFamilies.findIndex(f => f.id === updatedFam.id);
+            if (idx >= 0) cacheFamilies[idx] = { ...cacheFamilies[idx], ...updatedFam };
+
+            // Update in children & logs
+            cacheChildren.forEach(c => {
+              if (c.family_id === updatedFam.id) c.family = updatedFam;
+            });
+            cacheLogs.forEach(l => {
+              if (l.family_id === updatedFam.id) l.family = updatedFam;
+            });
+          } else if (payload.eventType === 'DELETE') {
+            const delId = payload.old?.id;
+            cacheFamilies = cacheFamilies.filter(f => f.id !== delId);
+          }
+
+          refreshCurrentView();
+          scheduleBackgroundReconcile();
+        })
+
+        // 4. STAGES TABLE (Add, Rename, Reorder, Delete)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'stages' }, (payload) => {
+          console.log('[Realtime stages]:', payload.eventType, payload);
+
+          if (payload.eventType === 'INSERT') {
+            const idx = cacheStages.findIndex(s => s.id === payload.new.id);
+            if (idx >= 0) cacheStages[idx] = payload.new; else cacheStages.push(payload.new);
+          } else if (payload.eventType === 'UPDATE') {
+            const idx = cacheStages.findIndex(s => s.id === payload.new.id);
+            if (idx >= 0) cacheStages[idx] = { ...cacheStages[idx], ...payload.new };
+          } else if (payload.eventType === 'DELETE') {
+            cacheStages = cacheStages.filter(s => s.id !== payload.old?.id);
+          }
+
+          refreshCurrentView();
+          scheduleBackgroundReconcile();
+        })
+
+        // 5. POINT_RULES TABLE (Add, Edit, Points value, Toggle active, Delete)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'point_rules' }, (payload) => {
+          console.log('[Realtime point_rules]:', payload.eventType, payload);
+
+          if (payload.eventType === 'INSERT') {
+            const idx = cacheRules.findIndex(r => r.id === payload.new.id);
+            if (idx >= 0) cacheRules[idx] = payload.new; else cacheRules.push(payload.new);
+          } else if (payload.eventType === 'UPDATE') {
+            const idx = cacheRules.findIndex(r => r.id === payload.new.id);
+            if (idx >= 0) cacheRules[idx] = { ...cacheRules[idx], ...payload.new };
+          } else if (payload.eventType === 'DELETE') {
+            cacheRules = cacheRules.filter(r => r.id !== payload.old?.id);
+          }
+
+          refreshCurrentView();
+          scheduleBackgroundReconcile();
+        })
+
+        // 6. PROFILES TABLE (User approval, Role change admin/servant, Name change)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
+          console.log('[Realtime profiles]:', payload.eventType, payload);
+
+          if (payload.eventType === 'INSERT') {
+            const idx = cacheProfiles.findIndex(p => p.id === payload.new.id);
+            if (idx >= 0) cacheProfiles[idx] = payload.new; else cacheProfiles.push(payload.new);
+          } else if (payload.eventType === 'UPDATE') {
+            const updatedProf = payload.new;
+            const idx = cacheProfiles.findIndex(p => p.id === updatedProf.id);
+            if (idx >= 0) cacheProfiles[idx] = { ...cacheProfiles[idx], ...updatedProf };
+
+            // If it concerns current logged in user
+            if (currentUser && updatedProf.id === currentUser.id) {
+              currentProfile = updatedProf;
+              currentRole = updatedProf.role;
+
+              // If servant was just approved by Admin, transition out of pending screen!
+              if (updatedProf.is_approved && !currentProfile.is_approved) {
+                showToast('🎉 تهانينا! قام مسؤول الخدمة باعتماد حسابك كخادم الآن.', true);
+                initApp();
+                return;
+              }
+            }
+          } else if (payload.eventType === 'DELETE') {
+            cacheProfiles = cacheProfiles.filter(p => p.id !== payload.old?.id);
+          }
+
+          refreshCurrentView();
+          scheduleBackgroundReconcile();
+        })
+
+        // 7. FAMILY_SERVANTS TABLE (Assign servant to family, remove assignment)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'family_servants' }, (payload) => {
+          console.log('[Realtime family_servants]:', payload.eventType, payload);
+
+          if (payload.eventType === 'INSERT') {
+            const newLink = payload.new;
+            cacheFamilyServants.push(newLink);
+            if (newLink.servant_id === currentUser?.id && !assignedFamilyIds.includes(newLink.family_id)) {
+              assignedFamilyIds.push(newLink.family_id);
+              const fam = cacheFamilies.find(f => f.id === newLink.family_id);
+              showToast(`تم إسناد (${fam?.name || 'أسرة جديدة'}) إلى خدمتك!`, true);
+            }
+          } else if (payload.eventType === 'DELETE') {
+            const oldLink = payload.old;
+            cacheFamilyServants = cacheFamilyServants.filter(fs => !(fs.servant_id === oldLink?.servant_id && fs.family_id === oldLink?.family_id));
+            if (oldLink?.servant_id === currentUser?.id) {
+              assignedFamilyIds = assignedFamilyIds.filter(fid => fid !== oldLink?.family_id);
+            }
+          }
+
+          refreshCurrentView();
+          scheduleBackgroundReconcile();
+        })
+
+        // Status & Reconnect listener
+        .subscribe((status, err) => {
+          console.log('[Realtime Channel Status]:', status, err || '');
+          if (status === 'SUBSCRIBED') {
+            isRealtimeConnected = true;
+            updateRealtimeIndicator(true, 'بث مباشر Realtime');
+          } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR') {
+            isRealtimeConnected = false;
+            updateRealtimeIndicator(false, 'جاري إعادة الاتصال...');
+            // Attempt auto reconnection after brief backoff
+            setTimeout(() => {
+              if (!isRealtimeConnected) {
+                teardownRealtime();
+                setupRealtime();
+              }
+            }, 3000);
+          }
+        });
+    }
+
+    function scheduleBackgroundReconcile() {
+      clearTimeout(realtimeSyncDebounceTimer);
+      realtimeSyncDebounceTimer = setTimeout(async () => {
+        await loadAllData();
+        refreshCurrentView();
+      }, 2000);
+    }
+
+    // Network offline / online listeners for instant reconnection
+    window.addEventListener('online', async () => {
+      console.log('🌐 Network online detected, reconciling data...');
+      updateRealtimeIndicator(false, 'جاري المزامنة...');
+      await loadAllData();
+      teardownRealtime();
+      setupRealtime();
+      refreshCurrentView();
+    });
+
+    window.addEventListener('offline', () => {
+      console.log('⚠️ Network offline detected');
+      updateRealtimeIndicator(false, 'انقطع الاتصال بالإنترنت');
+    });
+
+    function refreshCurrentView() {
+      if (isDisplayOnlyMode || currentRole === 'display') {
+        renderDisplayScreen();
+      } else if (currentRole === 'admin') {
+        renderAdminDashboard();
+      } else if (currentRole === 'servant') {
+        renderServantHome();
+      }
+    }
+
+    // ===========================================================================
+    // 3. COMPUTATIONS (HEROES OF THE DAY & TIE BREAKER)
+    // ===========================================================================
+    function computeTodayStats() {
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+      const childTodayMap = new Map();
+      const childTotalMap = new Map();
+      const childLastPointMap = new Map();
+      const familyTodayMap = new Map();
+      const familyTotalMap = new Map();
+      let grandTotalToday = 0;
+
+      cacheLogs.forEach(log => {
+        if (log.is_reverted) return;
+        const pts = log.points || 0;
+        const time = new Date(log.created_at).getTime();
+
+        if (log.child_id) {
+          childTotalMap.set(log.child_id, (childTotalMap.get(log.child_id) || 0) + pts);
+        }
+        if (log.family_id) {
+          familyTotalMap.set(log.family_id, (familyTotalMap.get(log.family_id) || 0) + pts);
+        }
+
+        if (time >= startOfToday) {
+          if (log.child_id) {
+            childTodayMap.set(log.child_id, (childTodayMap.get(log.child_id) || 0) + pts);
+          }
+          if (log.family_id) {
+            familyTodayMap.set(log.family_id, (familyTodayMap.get(log.family_id) || 0) + pts);
+          }
+          grandTotalToday += pts;
+
+          if (log.child_id) {
+            const currentLast = childLastPointMap.get(log.child_id);
+            if (!currentLast || time > new Date(currentLast).getTime()) {
+              childLastPointMap.set(log.child_id, log.created_at);
+            }
+          }
+        }
+      });
+
+      const childrenWithPoints = cacheChildren.filter(c => c.is_active).map(c => ({
+        child: c,
+        pointsToday: childTodayMap.get(c.id) || 0,
+        pointsTotal: childTotalMap.get(c.id) || 0,
+        lastPointAt: childLastPointMap.get(c.id) || null
+      }));
+
+      // Sort: 1) Points today DESC, 2) Last transaction DESC, 3) Name ASC
+      childrenWithPoints.sort((a, b) => {
+        if (b.pointsToday !== a.pointsToday) return b.pointsToday - a.pointsToday;
+        const timeA = a.lastPointAt ? new Date(a.lastPointAt).getTime() : 0;
+        const timeB = b.lastPointAt ? new Date(b.lastPointAt).getTime() : 0;
+        if (timeB !== timeA) return timeB - timeA;
+        return (a.child.full_name || '').localeCompare(b.child.full_name || '', 'ar');
+      });
+
+      const top3ChildrenToday = childrenWithPoints.slice(0, 3);
+
+      const familiesWithPoints = cacheFamilies.filter(f => f.is_active).map(f => {
+        const count = cacheChildren.filter(c => c.family_id === f.id && c.is_active).length;
+        return {
+          family: f,
+          pointsToday: familyTodayMap.get(f.id) || 0,
+          pointsTotal: familyTotalMap.get(f.id) || 0,
+          childrenCount: count
+        };
+      });
+
+      familiesWithPoints.sort((a, b) => {
+        if (b.pointsToday !== a.pointsToday) return b.pointsToday - a.pointsToday;
+        return (a.family.name || '').localeCompare(b.family.name || '', 'ar');
+      });
+
+      const top3FamiliesToday = familiesWithPoints.slice(0, 3);
+
+      return {
+        childrenWithPoints,
+        top3ChildrenToday,
+        familiesWithPoints,
+        top3FamiliesToday,
+        grandTotalToday
+      };
+    }
+
+    // ===========================================================================
+    // 4. UI SCREENS - SETUP & AUTH
+    // ===========================================================================
+
+    // SETUP SCREEN
+    function renderConfigSetup() {
+      const root = document.getElementById('app-root');
+      let rawSavedUrl = localStorage.getItem('CHURCH_SUPABASE_URL') || '';
+      let savedUrl = cleanSupabaseUrl(rawSavedUrl) || 'https://wbozabcuapqzfkkityygf.supabase.co';
+      const savedKey = localStorage.getItem('CHURCH_SUPABASE_KEY') || '';
+
+      root.innerHTML = `
+        <div class="min-h-screen flex items-center justify-center p-4">
+          <div class="bg-white max-w-lg w-full rounded-3xl p-6 sm:p-8 border border-church-200 shadow-2xl space-y-5 text-right">
+            <div class="text-center">
+              <div class="w-16 h-16 rounded-3xl bg-church-100 border border-church-300 flex items-center justify-center text-3xl mx-auto mb-3 shadow-md">⛪</div>
+              <h2 class="text-2xl font-black text-church-950">إعداد بيانات Supabase</h2>
+              <p class="text-xs text-slate-500 mt-1">أدخل بيانات مشروعك للاتصال بقاعدة البيانات مباشرة</p>
+            </div>
+
+            <form id="setup-form" class="space-y-4">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">رابط المشروع (Project URL):</label>
+                <input id="cfg-url" type="url" required value="${savedUrl}" placeholder="https://xyz.supabase.co" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500 font-mono text-left" />
+                <span class="text-[10px] text-slate-400 mt-1 block">بدون أي كلمة /rest/v1/ في النهاية</span>
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">المفتاح العام (anon public key):</label>
+                <input id="cfg-key" type="text" required value="${savedKey}" placeholder="eyJhbGciOi..." class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500 font-mono text-left" />
+              </div>
+
+              <div class="bg-amber-50 p-3.5 rounded-2xl border border-amber-200 text-xs text-amber-900 leading-relaxed">
+                💡 <strong>تنبيه:</strong> تأكد أنك قمت بنسخ كود <code class="font-mono bg-amber-100 px-1 rounded">supabase/schema.sql</code> وتنفيذه في <strong>Supabase SQL Editor</strong> لإنشاء الجداول والـ RLS.
+              </div>
+
+              <button type="submit" class="w-full py-3 rounded-xl bg-church-600 hover:bg-church-700 text-white font-black text-xs shadow-md transition-all active:scale-98">
+                حفظ وبدء التشغيل الآن
+              </button>
+            </form>
+          </div>
+        </div>
+      `;
+
+      document.getElementById('setup-form').onsubmit = (e) => {
+        e.preventDefault();
+        const rawUrl = document.getElementById('cfg-url').value.trim();
+        const rawKey = document.getElementById('cfg-key').value.trim();
+        const cleanUrl = cleanSupabaseUrl(rawUrl);
+
+        if (!cleanUrl || !cleanUrl.includes('.')) {
+          alert('يرجى التأكد من كتابة رابط المشروع بشكل صحيح، مثلاً: https://xyz.supabase.co');
+          return;
+        }
+
+        localStorage.setItem('CHURCH_SUPABASE_URL', cleanUrl);
+        localStorage.setItem('CHURCH_SUPABASE_KEY', rawKey);
+        initApp();
+      };
+    }
+
+    // LOADING SCREEN
+    function renderLoading(msg) {
+      const root = document.getElementById('app-root');
+      root.innerHTML = `
+        <div class="min-h-screen flex flex-col items-center justify-center p-4 gap-3 text-center">
+          <img src="church-logo.jpg" onerror="this.onerror=null; this.src='church-logo.svg';" class="w-20 h-20 rounded-full shadow-lg border-2 border-amber-400 object-cover mx-auto" alt="كنيسة العذراء وبولس" />
+          <div class="w-10 h-10 border-4 border-church-400/30 border-t-church-600 rounded-full animate-spin mx-auto mt-1"></div>
+          <div class="text-lg font-black text-church-950">كنيسة السيدة العذراء والشهيد ماربولس</div>
+          <p class="text-xs text-slate-500 font-bold">${msg || 'جاري التحميل...'}</p>
+        </div>
+      `;
+    }
+
+    // LOGIN / REGISTER SCREEN
+    function renderLogin() {
+      const root = document.getElementById('app-root');
+      root.innerHTML = `
+        <div class="min-h-screen flex flex-col items-center justify-center p-4">
+          <div class="text-center mb-6">
+            <img src="church-logo.jpg" onerror="this.onerror=null; this.src='church-logo.svg';" class="w-24 h-24 rounded-full shadow-xl border-4 border-amber-400/90 object-cover mx-auto mb-3" alt="شعار الكنيسة" />
+            <h1 class="text-2xl font-black text-church-950">كنيسة السيدة العذراء والشهيد بولس</h1>
+            <p class="text-xs text-church-700 font-bold mt-1">خدمة مدارس الأحد — الحضرة الجديدة</p>
+          </div>
+
+          <div class="bg-white max-w-md w-full rounded-3xl p-6 sm:p-8 border border-church-200 shadow-xl space-y-4">
+            <div id="auth-alert" class="hidden p-3 rounded-xl text-xs font-bold"></div>
+
+            <div class="flex border-b border-church-100 text-xs font-bold">
+              <button id="tab-login" class="flex-1 py-2.5 border-b-2 border-church-600 text-church-900">تسجيل الدخول</button>
+              <button id="tab-register" class="flex-1 py-2.5 text-slate-500">حساب خادم جديد</button>
+            </div>
+
+            <form id="auth-form" class="space-y-4 text-right">
+              <div id="field-name" class="hidden">
+                <label class="block text-xs font-bold text-slate-700 mb-1">الاسم بالكامل:</label>
+                <input id="input-name" type="text" placeholder="مثال: الخادم مينا نبيل" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500" />
+              </div>
+              <div id="field-family" class="hidden">
+                <label class="block text-xs font-bold text-slate-700 mb-1">الأسرة التي تخدم بها:</label>
+                <select id="input-family" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500 bg-white">
+                  <option value="">جاري تحميل الأسر...</option>
+                </select>
+                <span class="text-[10px] text-slate-400 mt-1 block">اختر أسرتك لربط حسابك بها فور الاعتماد من مسؤول الخدمة</span>
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">البريد الإلكتروني:</label>
+                <input id="input-email" type="email" required placeholder="name@church.com" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500 font-mono text-left" />
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">كلمة المرور:</label>
+                <input id="input-pass" type="password" required minlength="6" placeholder="••••••••" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500 font-mono text-left" />
+              </div>
+
+              <button id="btn-submit" type="submit" class="w-full py-3 rounded-xl bg-church-600 hover:bg-church-700 text-white font-black text-xs shadow-md transition-all active:scale-98">
+                دخول للنظام
+              </button>
+            </form>
+
+            <div class="pt-3 border-t border-church-100 text-center">
+              <button id="btn-open-display" class="inline-flex items-center gap-2 text-xs font-bold text-church-800 hover:text-church-950 transition-colors">
+                🖥️ فتح شاشة العرض (TV Mode) للشاشات والتلفزيون مباشرة
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      let isRegistering = false;
+      const tabLogin = document.getElementById('tab-login');
+      const tabRegister = document.getElementById('tab-register');
+      const fieldName = document.getElementById('field-name');
+      const fieldFamily = document.getElementById('field-family');
+      const btnSubmit = document.getElementById('btn-submit');
+      const authAlert = document.getElementById('auth-alert');
+
+      const KNOWN_DEFAULT_FAMILIES = [
+        { name: 'البابا شنوده الثالث', stage_name: '1 ابتدائي' },
+        { name: 'البابا كيرلس السادس', stage_name: '2 ابتدائي' },
+        { name: 'مارجرجس', stage_name: '3 ابتدائي' }
+      ];
+
+      // Load available families dynamically for registration
+      function populateFamilyDropdown() {
+        const select = document.getElementById('input-family');
+        if (!select) return;
+
+        // 1. Try in-memory cache first
+        let list = (cacheFamilies && cacheFamilies.length > 0) ? cacheFamilies : null;
+
+        // 2. Try localStorage cache second
+        if (!list) {
+          try {
+            const raw = localStorage.getItem('CHURCH_CACHED_FAMILIES');
+            if (raw) list = JSON.parse(raw);
+          } catch(e) {}
+        }
+
+        // 3. Fallback immediately to the registered church families
+        if (!list || list.length === 0) {
+          list = KNOWN_DEFAULT_FAMILIES;
+        }
+
+        // Render immediately so user NEVER sees "لا توجد أسر"
+        select.innerHTML = '<option value="">اختر أسرتك...</option>' + 
+          list.map(f => {
+            const sName = f.stage?.name || f.stage_name || '';
+            const val = f.id || f.name;
+            return `<option value="${val}" data-name="${f.name}">${f.name} ${sName ? `(${sName})` : ''}</option>`;
+          }).join('');
+
+        // 4. Try live fetch in background if connected
+        if (supabaseClient) {
+          supabaseClient
+            .from('families')
+            .select('id, name, stage:stages(name)')
+            .order('name')
+            .then(({ data }) => {
+              if (data && data.length > 0) {
+                select.innerHTML = '<option value="">اختر أسرتك...</option>' + 
+                  data.map(f => `<option value="${f.id}" data-name="${f.name}">${f.name} (${f.stage?.name || ''})</option>`).join('');
+                try { localStorage.setItem('CHURCH_CACHED_FAMILIES', JSON.stringify(data)); } catch(e) {}
+              }
+            })
+            .catch(() => {});
+        }
+      }
+
+      populateFamilyDropdown();
+
+      tabLogin.onclick = () => {
+        isRegistering = false;
+        tabLogin.className = 'flex-1 py-2.5 border-b-2 border-church-600 text-church-900 font-bold';
+        tabRegister.className = 'flex-1 py-2.5 text-slate-500 font-bold';
+        fieldName.classList.add('hidden');
+        fieldFamily.classList.add('hidden');
+        btnSubmit.textContent = 'دخول للنظام';
+      };
+
+      tabRegister.onclick = () => {
+        isRegistering = true;
+        tabRegister.className = 'flex-1 py-2.5 border-b-2 border-church-600 text-church-900 font-bold';
+        tabLogin.className = 'flex-1 py-2.5 text-slate-500 font-bold';
+        fieldName.classList.remove('hidden');
+        fieldFamily.classList.remove('hidden');
+        btnSubmit.textContent = 'إنشاء الحساب';
+        populateFamilyDropdown();
+      };
+
+      document.getElementById('btn-open-display').onclick = async () => {
+        isDisplayOnlyMode = true;
+        renderLoading('جاري فتح شاشة العرض...');
+        await loadAllData();
+        setupRealtime();
+        renderDisplayScreen();
+      };
+
+      document.getElementById('auth-form').onsubmit = async (e) => {
+        e.preventDefault();
+        const email = document.getElementById('input-email').value.trim();
+        const pass = document.getElementById('input-pass').value;
+        const name = document.getElementById('input-name').value.trim();
+        const famSelect = document.getElementById('input-family');
+        const selectedOpt = famSelect?.options[famSelect.selectedIndex];
+        const rawFamilyVal = famSelect?.value || '';
+        const requestedFamilyName = selectedOpt?.getAttribute('data-name') || selectedOpt?.text || '';
+
+        // Only send requested_family_id if it's a valid 36-char UUID; otherwise send null and keep the name
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const requestedFamilyId = uuidRegex.test(rawFamilyVal) ? rawFamilyVal : null;
+
+        btnSubmit.disabled = true;
+        btnSubmit.textContent = 'جاري التحقق...';
+        authAlert.classList.add('hidden');
+
+        try {
+          if (isRegistering) {
+            if (!name) throw new Error('يرجى إدخال الاسم بالكامل');
+            console.log('[Supabase Auth] Attempting signUp for:', email);
+            const { data, error } = await supabaseClient.auth.signUp({
+              email,
+              password: pass,
+              options: { 
+                data: { 
+                  full_name: name,
+                  requested_family_id: requestedFamilyId,
+                  requested_family_name: requestedFamilyName
+                } 
+              }
+            });
+            if (error) {
+              console.error('[Supabase Auth Error]:', error);
+              throw error;
+            }
+            console.log('[Supabase Auth Success]:', data);
+
+            authAlert.className = 'p-3.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 leading-relaxed';
+            authAlert.textContent = 'تم تسجيل الحساب بنجاح في قاعدة البيانات وتحديد الأسرة! بانتظار اعتماد مسؤول الخدمة.';
+            authAlert.classList.remove('hidden');
+          } else {
+            console.log('[Supabase Auth] Attempting signIn for:', email);
+            const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: pass });
+            if (error) {
+              console.error('[Supabase Auth Error]:', error);
+              throw error;
+            }
+            console.log('[Supabase Auth Success]:', data);
+            initApp();
+          }
+        } catch (err) {
+          console.error('[Auth Exception]:', err);
+          authAlert.className = 'p-3.5 rounded-xl text-xs font-bold bg-rose-50 text-rose-800 border border-rose-200 leading-relaxed';
+          const msg = err && err.message ? err.message : String(err);
+          authAlert.textContent = `خطأ: ${msg}`;
+          authAlert.classList.remove('hidden');
+        } finally {
+          btnSubmit.disabled = false;
+          btnSubmit.textContent = isRegistering ? 'إنشاء الحساب' : 'دخول للنظام';
+        }
+      };
+    }
+
+    // UNAPPROVED NOTICE
+    function renderUnapproved() {
+      const root = document.getElementById('app-root');
+      root.innerHTML = `
+        <div class="min-h-screen flex items-center justify-center p-4">
+          <div class="bg-white max-w-md w-full rounded-3xl p-8 border border-church-200 shadow-xl text-center space-y-4">
+            <div class="w-16 h-16 rounded-3xl bg-amber-100 text-amber-800 flex items-center justify-center text-3xl mx-auto border border-amber-300">⏳</div>
+            <h2 class="text-2xl font-black text-slate-800">الحساب قيد المراجعة</h2>
+            <p class="text-xs text-slate-600 leading-relaxed">
+              أهلاً بك يا خادم المسيح (${currentProfile?.full_name || currentUser?.email}). تم تسجيل حسابك بنجاح، وهو بانتظار اعتماد مسؤول الخدمة (الأدمن) وتحديد الأسر المخصصة لك.
+            </p>
+            <div class="pt-4 flex flex-col gap-2">
+              <button onclick="initApp()" class="w-full py-2.5 rounded-xl bg-church-600 text-white font-bold text-xs shadow-md">
+                🔄 التحقق من حالة الاعتماد الآن
+              </button>
+              <button onclick="handleSignOut()" class="w-full py-2.5 rounded-xl border border-slate-200 text-slate-600 text-xs font-bold">
+                تسجيل الخروج
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function handleSignOut() {
+      teardownRealtime();
+      if (supabaseClient) await supabaseClient.auth.signOut();
+      currentUser = null;
+      currentProfile = null;
+      currentRole = null;
+      isDisplayOnlyMode = false;
+      renderLogin();
+    }
+
+    // ===========================================================================
+    // 5. DISPLAY SCREEN (TV / PROJECTOR PRESENTATION)
+    // ===========================================================================
+    function renderDisplayScreen() {
+      const stats = computeTodayStats();
+      const root = document.getElementById('app-root');
+
+      const top3 = stats.top3ChildrenToday;
+      const top3Fams = stats.top3FamiliesToday;
+
+      root.innerHTML = `
+        <div class="min-h-screen bg-gradient-to-b from-slate-950 via-church-950 to-black text-white flex flex-col justify-between selection:bg-yellow-500/30">
+          <!-- Display Header -->
+          <header class="w-full bg-black/60 backdrop-blur-md px-6 py-4 border-b border-church-500/40 flex items-center justify-between z-30">
+            <div class="flex items-center gap-3">
+              <img src="church-logo.jpg" onerror="this.onerror=null; this.src='church-logo.svg';" class="w-13 h-13 rounded-full border-2 border-amber-400/80 object-cover shadow-lg shrink-0" alt="شعار كنيسة العذراء وبولس" />
+              <div>
+                <h1 class="text-2xl font-black text-church-200">خدمة مدارس الأحد</h1>
+                <p class="text-xs text-church-300 font-medium">كنيسة السيدة العذراء والشهيد بولس الرسول — الحضرة الجديدة</p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-3">
+              <div class="realtime-indicator-badge inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${isRealtimeConnected ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-300' : 'bg-amber-950/80 border border-amber-500/50 text-amber-300'}">
+                <span class="w-2 h-2 rounded-full ${isRealtimeConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}"></span>
+                <span>${isRealtimeConnected ? 'بث مباشر Realtime' : 'جاري الاتصال...'}</span>
+              </div>
+              <button onclick="toggleFullscreen()" class="px-4 py-2 rounded-xl bg-church-800 text-xs font-bold border border-church-500/40 text-church-100 hover:bg-church-700">
+                ⛶ ملء الشاشة
+              </button>
+              ${currentUser ? `
+                <button onclick="isDisplayOnlyMode=false; initApp();" class="px-4 py-2 rounded-xl bg-church-700/60 text-xs font-bold border border-church-500/30 text-white">
+                  ← لوحة التحكم
+                </button>
+              ` : `
+                <button onclick="isDisplayOnlyMode=false; renderLogin();" class="px-4 py-2 rounded-xl bg-church-700/60 text-xs font-bold border border-church-500/30 text-white">
+                  تسجيل الدخول
+                </button>
+              `}
+            </div>
+          </header>
+
+          <!-- Main Content -->
+          <main class="max-w-7xl mx-auto w-full px-4 py-8 flex flex-col gap-10">
+            <!-- Top 3 Children (Global across ALL stages & families) -->
+            <section class="text-center">
+              <div class="inline-block bg-yellow-500/20 border border-yellow-400/40 text-yellow-300 px-5 py-1.5 rounded-full text-xs font-bold shadow-lg mb-2">
+                ✨ الترتيب العام لليوم — أعلى 3 أولاد على مستوى كافة المراحل والأسر ✨
+              </div>
+              <h2 class="text-3xl md:text-5xl font-black bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-400 bg-clip-text text-transparent mb-8">
+                🏆 أبطال اليوم 🏆
+              </h2>
+
+              ${top3.length === 0 ? `
+                <div class="bg-slate-900/60 border border-church-500/30 rounded-3xl p-10 text-center">
+                  <div class="text-4xl mb-2">🏆</div>
+                  <h3 class="text-xl font-bold text-church-200">في انتظار تسجيل نقاط اليوم</h3>
+                  <p class="text-xs text-slate-400 mt-1">سيتوج هنا أعلى 3 أولاد فور إضافة الخدام للنقاط</p>
+                </div>
+              ` : `
+                <div class="flex flex-col md:flex-row items-center md:items-end justify-center gap-6 max-w-5xl mx-auto">
+                  ${top3.length > 1 ? renderHeroCard(top3[1], 2, 'order-2 md:order-1', '🥈 الثاني', 'from-slate-400 to-gray-200 text-slate-950', 'text-slate-200', 'h-28') : ''}
+                  ${renderHeroCard(top3[0], 1, 'order-1 md:order-2 scale-105 z-10', '🥇 الأول (بطل الخدمة)', 'from-amber-400 to-yellow-300 text-yellow-950', 'text-yellow-300', 'h-40', true)}
+                  ${top3.length > 2 ? renderHeroCard(top3[2], 3, 'order-3 md:order-3', '🥉 الثالث', 'from-amber-700 to-amber-900 text-white', 'text-amber-400', 'h-20') : ''}
+                </div>
+              `}
+            </section>
+
+            <!-- Top 3 Families Champions -->
+            <section class="pt-6 border-t border-church-800/50">
+              <div class="text-center mb-6">
+                <h3 class="text-2xl md:text-3xl font-black text-white">🏠 أبطال الأسر 🏠</h3>
+                <p class="text-xs text-church-200/70 mt-1">مجموع نقاط أطفال كل أسرة المسجلة خلال اليوم</p>
+              </div>
+
+              ${top3Fams.length === 0 ? `
+                <div class="text-center text-slate-500 text-xs py-4">لا توجد أسر نشطة اليوم</div>
+              ` : `
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
+                  ${top3Fams.map((f, i) => `
+                    <div class="rounded-3xl p-5 border-2 bg-gradient-to-b from-church-950/80 to-slate-950 border-church-500/40 text-center shadow-lg">
+                      <span class="px-3 py-1 rounded-full text-xs font-black ${i===0?'bg-amber-400 text-yellow-950':i===1?'bg-slate-300 text-slate-900':'bg-amber-800 text-white'}">
+                        ${i===0?'🥇 المركز الأول':i===1?'🥈 المركز الثاني':'🥉 المركز الثالث'}
+                      </span>
+                      <h4 class="text-xl font-black text-white mt-3">${f.family.name}</h4>
+                      <div class="text-xs text-church-300 mt-1">📚 ${f.family.stage?.name || ''} • ${f.childrenCount} مخدوم</div>
+                      <div class="mt-3 py-2 bg-black/50 rounded-2xl border border-church-500/20">
+                        <span class="text-3xl font-black text-yellow-300">${f.pointsToday}</span>
+                        <span class="text-xs text-church-300 mr-1">نقطة اليوم</span>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              `}
+            </section>
+
+            <!-- All Families Leaderboard -->
+            ${stats.familiesWithPoints.length > 3 ? `
+              <section class="pt-6 border-t border-church-800/50 max-w-4xl mx-auto w-full">
+                <h4 class="text-lg font-bold text-church-200 mb-3 text-center">📊 الترتيب العام لكافة الأسر</h4>
+                <div class="bg-slate-900/60 rounded-2xl border border-church-800 overflow-hidden text-xs">
+                  <table class="w-full text-right">
+                    <thead class="bg-black/50 text-slate-400 font-bold border-b border-church-800">
+                      <tr>
+                        <th class="p-3">#</th>
+                        <th class="p-3">اسم الأسرة</th>
+                        <th class="p-3">المرحلة</th>
+                        <th class="p-3">عدد الأولاد</th>
+                        <th class="p-3 text-left">نقاط اليوم</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-church-900">
+                      ${stats.familiesWithPoints.map((f, idx) => `
+                        <tr class="hover:bg-church-950/40">
+                          <td class="p-3 font-bold text-church-400">#${idx + 1}</td>
+                          <td class="p-3 font-black text-white">${f.family.name}</td>
+                          <td class="p-3 text-slate-300">${f.family.stage?.name || ''}</td>
+                          <td class="p-3 text-slate-400">${f.childrenCount}</td>
+                          <td class="p-3 text-left font-black text-yellow-400 text-sm">${f.pointsToday} نقطة</td>
+                        </tr>
+                      `).join('')}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ` : ''}
+          </main>
+
+          <!-- Ticker Footer -->
+          <footer class="w-full bg-black/60 backdrop-blur-md border-t border-church-500/30 p-2 text-xs overflow-hidden">
+            <div class="max-w-7xl mx-auto flex items-center gap-4 overflow-x-auto no-scrollbar">
+              <span class="bg-red-600 text-white px-2 py-0.5 rounded-full font-black text-[11px] shrink-0 animate-pulse">● مباشر</span>
+              ${cacheLogs.slice(0, 8).map(l => `
+                <div class="flex items-center gap-2 bg-church-950/80 border border-church-700/50 px-3 py-1 rounded-xl shrink-0">
+                  <span class="font-bold text-church-300">${l.servant?.full_name || 'خادم'}:</span>
+                  <span class="text-white font-bold">${l.child?.full_name || 'مخدوم'}</span>
+                  <span class="font-black ${l.points>0?'text-emerald-400':'text-rose-400'}">${l.points>0?'+'+l.points:l.points}</span>
+                  <span class="text-slate-400 text-[10px]">(${l.reason})</span>
+                </div>
+              `).join('')}
+            </div>
+          </footer>
+        </div>
+      `;
+    }
+
+    function renderHeroCard(entry, rank, orderClass, badge, medalClass, ptsColor, pedestalH, hasCrown = false) {
+      if (!entry) return '';
+      const child = entry.child;
+      return `
+        <div class="w-full md:w-1/3 flex flex-col items-center ${orderClass}">
+          <div class="w-full rounded-3xl p-6 border-2 bg-gradient-to-b from-church-900/90 to-black/90 border-church-400/50 flex flex-col items-center text-center backdrop-blur-xl shadow-2xl">
+            ${hasCrown ? '<div class="text-3xl mb-1 animate-bounce">👑</div>' : ''}
+            <div class="w-24 h-24 rounded-full border-4 border-yellow-400/80 bg-church-950 flex items-center justify-center text-3xl font-black text-white shadow-xl overflow-hidden mb-3">
+              ${child.image_url ? `<img src="${child.image_url}" class="w-full h-full object-cover" />` : (child.full_name || '?').charAt(0)}
+            </div>
+            <span class="px-3 py-1 rounded-full text-xs font-black shadow bg-gradient-to-r ${medalClass} mb-2">${badge}</span>
+            <h3 class="text-2xl font-black text-white">${child.full_name}</h3>
+            <div class="text-xs text-church-200 mt-1 font-semibold">🏠 ${child.family?.name || ''} • 📚 ${child.stage?.name || ''}</div>
+            <div class="mt-4 w-full bg-black/60 rounded-2xl py-2.5 px-4 border border-church-500/30">
+              <div class="text-[11px] text-church-300">نقاط اليوم</div>
+              <div class="text-4xl font-black ${ptsColor}">${entry.pointsToday} <span class="text-sm text-church-300">نقطة</span></div>
+              <div class="text-[10px] text-slate-400 mt-0.5">الإجمالي العام: ${entry.pointsTotal}</div>
+            </div>
+          </div>
+          <div class="w-3/4 ${pedestalH} rounded-b-3xl bg-church-900 border-x border-b border-church-500/30 flex items-center justify-center text-4xl font-black text-church-500/30">
+            #${rank}
+          </div>
+        </div>
+      `;
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(()=>{});
+      } else {
+        document.exitFullscreen().catch(()=>{});
+      }
+    }
+
+    // ===========================================================================
+    // 6. SERVANT WORKFLOW
+    // ===========================================================================
+    function renderServantHome() {
+      const stats = computeTodayStats();
+      const root = document.getElementById('app-root');
+
+      // Filter children for assigned families
+      const myKids = stats.childrenWithPoints.filter(entry => assignedFamilyIds.includes(entry.child.family_id));
+
+      // Servant logs today
+      const myLogsToday = cacheLogs.filter(l => l.servant_id === currentUser?.id);
+
+      root.innerHTML = `
+        <div class="min-h-screen bg-[#fbf7ee] flex flex-col">
+          <header class="bg-white border-b border-church-200 px-6 py-4 flex items-center justify-between sticky top-0 z-30 shadow-xs">
+            <div class="flex items-center gap-3">
+              <img src="church-logo.jpg" onerror="this.onerror=null; this.src='church-logo.svg';" class="w-10 h-10 rounded-full border border-church-300 object-cover shadow-xs shrink-0" alt="شعار الكنيسة" />
+              <div>
+                <h2 class="text-lg font-black text-church-950">خدمة مدارس الأحد</h2>
+                <p class="text-xs text-slate-500">لوحة الخادم: ${currentProfile?.full_name}</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="realtime-indicator-badge inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${isRealtimeConnected ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-amber-50 border border-amber-200 text-amber-800'}">
+                <span class="w-2 h-2 rounded-full ${isRealtimeConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}"></span>
+                <span>${isRealtimeConnected ? 'بث مباشر Realtime' : 'جاري الاتصال...'}</span>
+              </div>
+              <button onclick="isDisplayOnlyMode=true; renderDisplayScreen();" class="px-3 py-1.5 rounded-xl bg-church-100 text-church-900 font-bold text-xs border border-church-300">
+                🖥️ شاشة العرض
+              </button>
+              <button onclick="handleSignOut()" class="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 font-bold text-xs border border-rose-200">
+                خروج
+              </button>
+            </div>
+          </header>
+
+          <!-- Servant Tabs -->
+          <div class="bg-white border-b border-church-200 px-6 flex gap-4 text-xs font-bold">
+            <button onclick="currentServantTab='kids'; renderServantHome();" class="py-3 border-b-2 ${currentServantTab==='kids'?'border-church-600 text-church-900':'border-transparent text-slate-500'}">
+              🧒 أولاد الخدمة (${myKids.length})
+            </button>
+            <button onclick="currentServantTab='history'; renderServantHome();" class="py-3 border-b-2 ${currentServantTab==='history'?'border-church-600 text-church-900':'border-transparent text-slate-500'}">
+              📜 سجل عمليّاتي اليوم (${myLogsToday.length})
+            </button>
+          </div>
+
+          <main class="max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-6 flex-1">
+            ${currentServantTab === 'kids' ? `
+              <!-- Search & Add Kid Bar -->
+              <div class="bg-gradient-to-r from-church-700 to-church-800 rounded-3xl p-6 text-white shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h3 class="text-xl font-black">أهلاً بك، يا خادم المسيح!</h3>
+                  <p class="text-xs text-church-200 mt-1">اضغط على أي مخدوم لتسجيل النقاط، أو أضف مخدوماً جديداً لأسرتك</p>
+                </div>
+                <div class="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto">
+                  <input id="servant-search" oninput="filterServantKids(this.value)" type="text" placeholder="🔍 بحث عن مخدوم بالاسم..." class="px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white placeholder-church-200 text-xs focus:bg-white focus:text-slate-900 focus:outline-none transition-all w-full sm:w-60" />
+                  <button onclick="openChildModal()" class="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-white text-church-900 font-black text-xs hover:bg-church-50 shadow-md transition-all shrink-0 flex items-center justify-center gap-1.5 active:scale-95">
+                    <span>➕ إضافة طفل</span>
+                  </button>
+                </div>
+              </div>
+
+              ${myKids.length === 0 ? `
+                <div class="bg-white rounded-3xl p-12 text-center border border-church-200">
+                  <div class="text-3xl mb-2">⚠️</div>
+                  <h4 class="text-lg font-bold text-slate-800">لم يتم تخصيص أسر لك بعد</h4>
+                  <p class="text-xs text-slate-500 mt-1">تواصل مع الأدمن من لوحة "المستخدمين" لتحديد الأسر الموكلة إليك</p>
+                </div>
+              ` : `
+                <div id="servant-kids-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  ${myKids.map(entry => renderServantKidCard(entry)).join('')}
+                </div>
+              `}
+            ` : `
+              <!-- Servant History -->
+              <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
+                <h3 class="font-black text-base text-slate-900">سجل النقاط المضافة من قبلك اليوم</h3>
+                ${myLogsToday.length === 0 ? `
+                  <div class="text-center py-8 text-slate-400 text-xs">لم تقم بتسجيل أي نقاط حتى الآن</div>
+                ` : `
+                  <div class="divide-y divide-church-100">
+                    ${myLogsToday.map(log => `
+                      <div class="py-3 flex items-center justify-between text-xs">
+                        <div>
+                          <span class="font-black text-slate-900">${log.child?.full_name}</span>
+                          <span class="text-slate-500 mr-2">(${log.reason})</span>
+                          ${log.is_reverted ? '<span class="mr-2 px-2 py-0.5 rounded bg-rose-100 text-rose-700 font-bold text-[10px]">ملغية</span>' : ''}
+                        </div>
+                        <div class="flex items-center gap-3">
+                          <span class="font-black ${log.points>0?'text-emerald-600':'text-rose-600'} text-sm">${log.points>0?'+'+log.points:log.points}</span>
+                          ${!log.is_reverted ? `
+                            <button onclick="revertPointLog('${log.id}')" class="px-2.5 py-1 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold text-[11px]">
+                              تراجع عن الخطأ
+                            </button>
+                          ` : ''}
+                        </div>
+                      </div>
+                    `).join('')}
+                  </div>
+                `}
+              </div>
+            `}
+          </main>
+        </div>
+      `;
+    }
+
+    function renderServantKidCard(entry) {
+      return `
+        <div class="servant-kid-card bg-white rounded-3xl p-5 border border-church-200 shadow-sm hover:border-church-400 transition-all flex flex-col justify-between" data-name="${entry.child.full_name}">
+          <div>
+            <div class="flex items-center gap-3">
+              <div class="w-14 h-14 rounded-2xl bg-church-100 flex items-center justify-center font-black text-xl text-church-800 overflow-hidden border border-church-200 shrink-0">
+                ${entry.child.image_url ? `<img src="${entry.child.image_url}" class="w-full h-full object-cover" onerror="this.remove()" />` : (entry.child.full_name || '?').charAt(0)}
+              </div>
+              <div>
+                <h4 class="font-extrabold text-sm text-slate-900 leading-snug">${entry.child.full_name}</h4>
+                <span class="text-[11px] font-bold text-church-700">${entry.child.family?.name || ''}</span>
+                ${entry.child.phone ? `<span class="block text-[10px] text-slate-400 font-mono mt-0.5">📞 ${entry.child.phone}</span>` : ''}
+              </div>
+            </div>
+
+            <div class="mt-4 grid grid-cols-2 gap-2 bg-church-50/80 p-2.5 rounded-2xl text-center">
+              <div>
+                <span class="text-[10px] text-slate-500 block">نقاط اليوم</span>
+                <span class="text-lg font-black text-amber-600 block">${entry.pointsToday}</span>
+              </div>
+              <div>
+                <span class="text-[10px] text-slate-500 block">الإجمالي</span>
+                <span class="text-lg font-black text-blue-600 block">${entry.pointsTotal}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 flex items-center gap-2">
+            <button onclick="openQuickPointModal('${entry.child.id}')" class="flex-1 py-2.5 rounded-xl bg-church-600 hover:bg-church-700 text-white font-black text-xs shadow-sm transition-all active:scale-95">
+              ★ تسجيل نقاط
+            </button>
+            <button onclick="openChildModal('${entry.child.id}')" title="تعديل بيانات الطفل" class="px-3 py-2.5 rounded-xl bg-church-100 hover:bg-church-200 text-church-800 font-bold text-xs border border-church-200 transition-all active:scale-95">
+              ✏️
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function filterServantKids(query) {
+      const q = query.trim().toLowerCase();
+      const cards = document.querySelectorAll('.servant-kid-card');
+      cards.forEach(c => {
+        const name = (c.getAttribute('data-name') || '').toLowerCase();
+        c.style.display = name.includes(q) ? 'flex' : 'none';
+      });
+    }
+
+    // QUICK POINTS MODAL
+    let selectedRuleForChild = null;
+
+    function showToast(message, isPositive = true) {
+      const existing = document.getElementById('toast-notification');
+      if (existing) existing.remove();
+
+      const toast = document.createElement('div');
+      toast.id = 'toast-notification';
+      toast.className = `fixed top-5 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl shadow-2xl border font-black text-xs sm:text-sm flex items-center gap-2.5 transition-all transform animate-bounce ${isPositive ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-rose-600 text-white border-rose-500'}`;
+      toast.innerHTML = `<span>${isPositive ? '🎉' : '⚠️'}</span> <span>${message}</span>`;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translate(-50%, -20px)';
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    // QUICK POINTS MODAL (2-STEP WITH CONFIRMATION)
+    function openQuickPointModal(childId) {
+      const child = cacheChildren.find(c => c.id === childId);
+      if (!child) return;
+
+      selectedRuleForChild = null;
+
+      const modalContainer = document.createElement('div');
+      modalContainer.id = 'modal-point-box';
+      modalContainer.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm';
+      modalContainer.innerHTML = `
+        <div class="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-church-200 overflow-hidden flex flex-col max-h-[90vh]">
+          <!-- Header -->
+          <div class="bg-gradient-to-r from-church-700 to-church-800 text-white p-4 flex items-center justify-between">
+            <div>
+              <h3 class="font-black text-base">${child.full_name}</h3>
+              <p class="text-xs text-church-200">الأسرة: ${child.family?.name || ''} • المرحلة: ${child.stage?.name || ''}</p>
+            </div>
+            <button onclick="document.getElementById('modal-point-box').remove()" class="text-white hover:bg-white/20 p-1.5 rounded-full">✕</button>
+          </div>
+
+          <!-- Rules List -->
+          <div class="p-4 overflow-y-auto space-y-2 flex-1">
+            <div class="text-xs font-bold text-slate-600 mb-2">1. اختر بند النقاط:</div>
+            ${cacheRules.filter(r => r.is_active).map(rule => {
+              const rTitle = rule.name || rule.title;
+              return `
+                <button type="button" onclick="selectRuleInModal('${child.id}', '${rule.id}')" id="rule-btn-${rule.id}" class="rule-choice-btn w-full p-3 rounded-2xl border flex items-center justify-between transition-all ${rule.type==='add'?'bg-emerald-50/40 hover:bg-emerald-100/70 border-emerald-200':'bg-rose-50/40 hover:bg-rose-100/70 border-rose-200'}">
+                  <div class="flex items-center gap-3">
+                    <span class="w-10 h-10 rounded-xl font-black text-sm flex items-center justify-center text-white shadow-xs ${rule.type==='add'?'bg-emerald-600':'bg-rose-600'}">
+                      ${rule.type==='add'?'+'+rule.points:rule.points}
+                    </span>
+                    <div class="text-right">
+                      <div class="font-black text-xs text-slate-900">${rTitle}</div>
+                      ${rule.description ? `<div class="text-[10px] text-slate-500">${rule.description}</div>` : ''}
+                    </div>
+                  </div>
+                  <span class="text-[11px] font-bold px-2.5 py-1 rounded-xl ${rule.type==='add'?'bg-emerald-100 text-emerald-800':'bg-rose-100 text-rose-800'}">
+                    تحديد
+                  </span>
+                </button>
+              `;
+            }).join('')}
+          </div>
+
+          <!-- 2. Confirmation Action Box (Dynamically injected) -->
+          <div id="point-confirmation-box" class="p-4 bg-church-50 border-t border-church-200 hidden">
+            <!-- Injected by selectRuleInModal -->
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modalContainer);
+    }
+
+    function selectRuleInModal(childId, ruleId) {
+      const child = cacheChildren.find(c => c.id === childId);
+      const rule = cacheRules.find(r => r.id === ruleId);
+      if (!child || !rule) return;
+
+      selectedRuleForChild = rule;
+
+      // Highlight selected rule button
+      document.querySelectorAll('.rule-choice-btn').forEach(btn => {
+        btn.classList.remove('ring-4', 'ring-church-500', 'shadow-md');
+      });
+      const selectedBtn = document.getElementById(`rule-btn-${ruleId}`);
+      if (selectedBtn) {
+        selectedBtn.classList.add('ring-4', 'ring-church-500', 'shadow-md');
+      }
+
+      // Display explicit confirmation box
+      const box = document.getElementById('point-confirmation-box');
+      if (!box) return;
+
+      const rTitle = rule.name || rule.title;
+      const isAdd = rule.type === 'add';
+      const ptsDisplay = isAdd ? `+${rule.points}` : `${rule.points}`;
+
+      box.classList.remove('hidden');
+      box.innerHTML = `
+        <div class="space-y-3">
+          <div class="p-3 bg-white rounded-2xl border border-church-200 flex items-center justify-between text-xs">
+            <div>
+              <span class="text-slate-500 block text-[10px]">الطفل:</span>
+              <span class="font-black text-slate-900 text-sm">${child.full_name}</span>
+            </div>
+            <div class="text-center">
+              <span class="text-slate-500 block text-[10px]">البند:</span>
+              <span class="font-bold text-church-800">${rTitle}</span>
+            </div>
+            <div class="text-left">
+              <span class="text-slate-500 block text-[10px]">النقاط:</span>
+              <span class="font-black text-lg ${isAdd ? 'text-emerald-600' : 'text-rose-600'}">${ptsDisplay}</span>
+            </div>
+          </div>
+
+          <button id="btn-confirm-point" onclick="executeConfirmedPoint('${child.id}', '${rule.id}')" class="w-full py-3 rounded-2xl font-black text-sm text-white shadow-lg transition-all active:scale-98 flex items-center justify-center gap-2 ${isAdd ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}">
+            <span>${isAdd ? '✓ تأكيد إضافة النقاط' : '⚠️ تأكيد الخصم'}</span>
+            <span class="text-xs bg-black/20 px-2 py-0.5 rounded-lg">${ptsDisplay} نقطة</span>
+          </button>
+        </div>
+      `;
+    }
+
+    async function executeConfirmedPoint(childId, ruleId) {
+      const child = cacheChildren.find(c => c.id === childId);
+      const rule = cacheRules.find(r => r.id === ruleId);
+      if (!child || !rule || !currentUser || !supabaseClient) return;
+
+      const btn = document.getElementById('btn-confirm-point');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'جاري التسجيل...';
+      }
+
+      const rTitle = rule.name || rule.title;
+      const isAdd = rule.type === 'add';
+      const pts = rule.points;
+
+      try {
+        const insertPayload = {
+          child_id: child.id,
+          family_id: child.family_id,
+          stage_id: child.stage_id,
+          rule_id: rule.id,
+          points: pts,
+          reason: rTitle,
+          servant_id: currentUser.id
+        };
+
+        // 1. Instant Optimistic UI Update (0.00 seconds delay)
+        const optimisticLog = {
+          id: 'temp-' + Date.now(),
+          ...insertPayload,
+          created_at: new Date().toISOString(),
+          is_reverted: false,
+          child: child,
+          family: child.family || cacheFamilies.find(f => f.id === child.family_id),
+          stage: child.stage || cacheStages.find(s => s.id === child.stage_id),
+          servant: currentProfile || { full_name: 'خادم' }
+        };
+
+        // Prepend immediately to cacheLogs
+        cacheLogs.unshift(optimisticLog);
+
+        // Close modal immediately
+        document.getElementById('modal-point-box')?.remove();
+
+        // Sound & Confetti feedback
+        if (isAdd) {
+          sounds.playSuccess();
+          triggerConfetti();
+          showToast(`✅ تم إضافة ${pts} نقطة لـ (${child.full_name})`, true);
+        } else {
+          sounds.playDeduct();
+          showToast(`⚠️ تم خصم ${Math.abs(pts)} نقطة من (${child.full_name})`, false);
+        }
+
+        // Refresh UI at the EXACT SAME INSTANT
+        refreshCurrentView();
+
+        // 2. Perform database insert in Supabase
+        const { data: insertedRows, error } = await supabaseClient
+          .from('point_logs')
+          .insert(insertPayload)
+          .select();
+
+        if (error) {
+          console.error('[executeConfirmedPoint error]:', error);
+          // Rollback optimistic item if insert failed
+          const idx = cacheLogs.findIndex(l => l.id === optimisticLog.id);
+          if (idx !== -1) cacheLogs.splice(idx, 1);
+          refreshCurrentView();
+          throw error;
+        }
+
+        // Replace temporary ID with real database ID
+        if (insertedRows && insertedRows[0]) {
+          optimisticLog.id = insertedRows[0].id;
+        }
+
+        // Background reload to sync fully
+        loadAllData().then(() => refreshCurrentView());
+      } catch (err) {
+        console.error('Point insert error:', err);
+        alert(err.message || 'فشل تسجيل النقطة في Supabase، تأكد من صلاحيات الخادم وتنفيذ ملف SQL');
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = isAdd ? '✓ تأكيد إضافة النقاط' : '⚠️ تأكيد الخصم';
+        }
+      }
+    }
+
+    async function revertPointLog(logId) {
+      if (!confirm('هل تريد التراجع عن هذه العملية؟')) return;
+      try {
+        const { error } = await supabaseClient.from('point_logs').update({
+          is_reverted: true,
+          reverted_at: new Date().toISOString(),
+          reverted_by: currentUser.id,
+          revert_reason: 'تراجع من الخادم'
+        }).eq('id', logId);
+        if (error) throw error;
+        showToast('تم التراجع عن العملية بنجاح', true);
+        await loadAllData();
+        refreshCurrentView();
+      } catch (err) {
+        alert(err.message || 'فشل التراجع');
+      }
+    }
+
+    // ===========================================================================
+    // FAMILY DIRECT POINTS MODAL (ADMIN ONLY)
+    // ===========================================================================
+    function openFamilyPointModal(preselectedFamilyId = null) {
+      if (currentRole !== 'admin') {
+        alert('هذه الصلاحية مخصصة لمدير النظام (Admin) فقط.');
+        return;
+      }
+
+      if (!cacheFamilies || cacheFamilies.length === 0) {
+        alert('لا توجد أسر مسجلة حالياً لإضافة نقاط لها.');
+        return;
+      }
+
+      const initialFamId = preselectedFamilyId || cacheFamilies[0]?.id;
+
+      const modalContainer = document.createElement('div');
+      modalContainer.id = 'modal-family-points';
+      modalContainer.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm';
+      modalContainer.innerHTML = `
+        <div class="bg-white w-full max-w-md rounded-3xl p-6 border border-church-200 shadow-2xl space-y-4 text-right">
+          <!-- Header -->
+          <div class="flex items-center justify-between border-b border-church-100 pb-3">
+            <div>
+              <h3 class="font-black text-base text-slate-900">⭐ إضافة / خصم نقاط للأسرة</h3>
+              <p class="text-[11px] text-slate-500 mt-0.5">لوحة الأدمن — تُسجل مباشرة في رصيد الأسرة وتظهر في الترتيب والعرض</p>
+            </div>
+            <button onclick="document.getElementById('modal-family-points').remove()" class="text-slate-400 hover:text-slate-600 font-bold p-1 rounded-full">✕</button>
+          </div>
+
+          <form onsubmit="handleSaveFamilyPointsForm(event)" class="space-y-4 text-right">
+            <!-- 1. Family Select -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">اختر الأسرة <span class="text-rose-500">*</span>:</label>
+              <select id="fpm-family" required class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 bg-white font-bold text-slate-800">
+                ${cacheFamilies.map(f => `
+                  <option value="${f.id}" ${f.id === initialFamId ? 'selected' : ''}>
+                    ${f.name} (${f.stage?.name || 'مرحلة'})
+                  </option>
+                `).join('')}
+              </select>
+            </div>
+
+            <!-- 2. Operation Type: Add or Deduct -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">نوع العملية:</label>
+              <div class="grid grid-cols-2 gap-2">
+                <button type="button" id="fpm-type-add" onclick="setFamilyPointType('add')" class="py-2.5 rounded-xl border-2 border-emerald-500 bg-emerald-50 text-emerald-800 font-black text-xs flex items-center justify-center gap-1.5 transition-all">
+                  <span>➕ إضافة نقاط للأسرة</span>
+                </button>
+                <button type="button" id="fpm-type-deduct" onclick="setFamilyPointType('deduct')" class="py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 font-bold text-xs flex items-center justify-center gap-1.5 transition-all">
+                  <span>➖ خصم نقاط من الأسرة</span>
+                </button>
+              </div>
+              <input type="hidden" id="fpm-op-type" value="add" />
+            </div>
+
+            <!-- 3. Points Amount & Quick Presets -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label class="text-xs font-bold text-slate-700">عدد النقاط <span class="text-rose-500">*</span>:</label>
+                <span class="text-[10px] text-slate-400">اختر من الأزرار أو اكتب القيمة</span>
+              </div>
+              <input id="fpm-points" type="number" required min="1" max="1000" value="5" class="w-full text-lg px-3.5 py-2 rounded-xl border border-church-300 font-black text-center text-church-900 focus:ring-2 focus:ring-church-500" />
+              
+              <div class="flex items-center justify-center gap-1.5 mt-2 flex-wrap">
+                <button type="button" onclick="document.getElementById('fpm-points').value=1" class="px-2.5 py-1 rounded-lg bg-church-50 border border-church-200 text-xs font-bold text-church-800 hover:bg-church-100">+1</button>
+                <button type="button" onclick="document.getElementById('fpm-points').value=2" class="px-2.5 py-1 rounded-lg bg-church-50 border border-church-200 text-xs font-bold text-church-800 hover:bg-church-100">+2</button>
+                <button type="button" onclick="document.getElementById('fpm-points').value=5" class="px-2.5 py-1 rounded-lg bg-church-100 border border-church-300 text-xs font-black text-church-900 hover:bg-church-200">+5</button>
+                <button type="button" onclick="document.getElementById('fpm-points').value=10" class="px-2.5 py-1 rounded-lg bg-church-100 border border-church-300 text-xs font-black text-church-900 hover:bg-church-200">+10</button>
+                <button type="button" onclick="document.getElementById('fpm-points').value=20" class="px-2.5 py-1 rounded-lg bg-church-100 border border-church-300 text-xs font-black text-church-900 hover:bg-church-200">+20</button>
+                <button type="button" onclick="document.getElementById('fpm-points').value=50" class="px-2.5 py-1 rounded-lg bg-amber-100 border border-amber-300 text-xs font-black text-amber-900 hover:bg-amber-200">+50</button>
+              </div>
+            </div>
+
+            <!-- 4. Reason (Required) -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">السبب / مناسبة النقاط <span class="text-rose-500">*</span>:</label>
+              <input id="fpm-reason" type="text" required placeholder="مثال: فوز الأسرة في مسابقة الألحان / نشاط جماعي" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 font-bold focus:ring-2 focus:ring-church-500" />
+              
+              <!-- Quick reason chips -->
+              <div class="flex items-center gap-1 mt-2 flex-wrap text-[10px]">
+                <button type="button" onclick="document.getElementById('fpm-reason').value='فوز في مسابقة الألحان'" class="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700">🏆 مسابقة الألحان</button>
+                <button type="button" onclick="document.getElementById('fpm-reason').value='تميز الأسرة في الترانيم'" class="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700">🎵 كورال وترانيم</button>
+                <button type="button" onclick="document.getElementById('fpm-reason').value='حضور جماعي كامل للأسرة'" class="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700">👥 حضور جماعي</button>
+                <button type="button" onclick="document.getElementById('fpm-reason').value='مشاركة متميزة في القداس'" class="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700">⛪ صلاة القداس</button>
+                <button type="button" onclick="document.getElementById('fpm-reason').value='نشاط روحي وإبداعي للأسرة'" class="px-2 py-0.5 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700">✨ نشاط روحي</button>
+              </div>
+            </div>
+
+            <!-- 5. Actions -->
+            <div class="pt-3 border-t border-church-100 flex items-center justify-end gap-2">
+              <button type="button" onclick="document.getElementById('modal-family-points').remove()" class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100">
+                إلغاء
+              </button>
+              <button type="submit" id="btn-submit-fam-pts" class="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-black shadow-md transition-all active:scale-98">
+                ✓ تأكيد حفظ نقاط الأسرة
+              </button>
+            </div>
+          </form>
+        </div>
+      `;
+      document.body.appendChild(modalContainer);
+    }
+
+    function setFamilyPointType(type) {
+      const isAdd = type === 'add';
+      const btnAdd = document.getElementById('fpm-type-add');
+      const btnDeduct = document.getElementById('fpm-type-deduct');
+      const opType = document.getElementById('fpm-op-type');
+      const submitBtn = document.getElementById('btn-submit-fam-pts');
+
+      if (opType) opType.value = type;
+
+      if (btnAdd && btnDeduct) {
+        if (isAdd) {
+          btnAdd.className = 'py-2.5 rounded-xl border-2 border-emerald-500 bg-emerald-50 text-emerald-800 font-black text-xs flex items-center justify-center gap-1.5 transition-all';
+          btnDeduct.className = 'py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 font-bold text-xs flex items-center justify-center gap-1.5 transition-all';
+          if (submitBtn) submitBtn.className = 'px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md transition-all active:scale-98';
+        } else {
+          btnDeduct.className = 'py-2.5 rounded-xl border-2 border-rose-500 bg-rose-50 text-rose-800 font-black text-xs flex items-center justify-center gap-1.5 transition-all';
+          btnAdd.className = 'py-2.5 rounded-xl border border-slate-200 bg-white text-slate-600 font-bold text-xs flex items-center justify-center gap-1.5 transition-all';
+          if (submitBtn) submitBtn.className = 'px-6 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black shadow-md transition-all active:scale-98';
+        }
+      }
+    }
+
+    async function handleSaveFamilyPointsForm(e) {
+      e.preventDefault();
+      if (currentRole !== 'admin') {
+        alert('هذه الصلاحية مخصصة لمدير النظام (Admin) فقط.');
+        return;
+      }
+
+      const famId = document.getElementById('fpm-family').value;
+      const opType = document.getElementById('fpm-op-type').value;
+      const rawPts = parseInt(document.getElementById('fpm-points').value) || 0;
+      const reason = document.getElementById('fpm-reason').value.trim();
+
+      if (!famId || rawPts <= 0 || !reason) {
+        alert('يرجى اختيار الأسرة وتحديد عدد النقاط وكتابة السبب');
+        return;
+      }
+
+      const fam = cacheFamilies.find(f => f.id === famId);
+      if (!fam) return;
+
+      const finalPoints = opType === 'deduct' ? -rawPts : rawPts;
+      const btn = document.getElementById('btn-submit-fam-pts');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'جاري الحفظ...';
+      }
+
+      // Close modal
+      document.getElementById('modal-family-points')?.remove();
+
+      // Sound & Celebration
+      if (finalPoints > 0) {
+        sounds.playSuccess();
+        triggerConfetti();
+      } else {
+        sounds.playDeduct();
+      }
+
+      // 1. Instant Optimistic update
+      const optimisticLog = {
+        id: 'temp-' + Date.now(),
+        child_id: null,
+        family_id: fam.id,
+        stage_id: fam.stage_id,
+        rule_id: null,
+        points: finalPoints,
+        reason: reason,
+        servant_id: currentUser.id,
+        is_reverted: false,
+        created_at: new Date().toISOString(),
+        child: { full_name: '⭐ نقاط مباشرة للأسرة' },
+        family: fam,
+        stage: cacheStages.find(s => s.id === fam.stage_id) || { name: '' },
+        servant: currentProfile || { full_name: 'إدارة الخدمة' }
+      };
+
+      cacheLogs.unshift(optimisticLog);
+      refreshCurrentView();
+
+      showToast(`تم ${finalPoints > 0 ? 'إضافة' : 'خصم'} ${Math.abs(finalPoints)} نقطة لـ (${fam.name}) بنجاح!`, true);
+
+      // 2. Persist to Supabase Database
+      try {
+        const { data, error } = await supabaseClient.from('point_logs').insert({
+          child_id: null,
+          family_id: fam.id,
+          stage_id: fam.stage_id,
+          points: finalPoints,
+          reason: reason,
+          servant_id: currentUser.id
+        }).select();
+
+        if (error) {
+          console.error('Family point insert error:', error);
+          const idx = cacheLogs.findIndex(l => l.id === optimisticLog.id);
+          if (idx !== -1) cacheLogs.splice(idx, 1);
+          refreshCurrentView();
+          throw error;
+        }
+
+        if (data && data[0]) {
+          optimisticLog.id = data[0].id;
+        }
+
+        loadAllData().then(() => refreshCurrentView());
+      } catch (err) {
+        console.error('Family points save failure:', err);
+        alert(err.message || 'فشل حفظ نقاط الأسرة، يرجى التأكد من تنفيذ ملف SQL وتعديل عمود child_id');
+      }
+    }
+
+    // ===========================================================================
+    // CHILD MODAL & IMAGE STORAGE HELPERS
+    // ===========================================================================
+    let pendingChildPhotoFile = null;
+    let pendingChildPhotoDelete = false;
+
+    async function compressImageFile(file, maxDimension = 600, quality = 0.8) {
+      return new Promise((resolve) => {
+        if (!file || !file.type.startsWith('image/')) {
+          return resolve(file);
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            let width = img.width;
+            let height = img.height;
+
+            if (width > height) {
+              if (width > maxDimension) {
+                height = Math.round((height * maxDimension) / width);
+                width = maxDimension;
+              }
+            } else {
+              if (height > maxDimension) {
+                width = Math.round((width * maxDimension) / height);
+                height = maxDimension;
+              }
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+
+            canvas.toBlob((blob) => {
+              resolve(blob || file);
+            }, 'image/jpeg', quality);
+          };
+          img.onerror = () => resolve(file);
+          img.src = e.target.result;
+        };
+        reader.onerror = () => resolve(file);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function uploadChildPhoto(file, childId) {
+      if (!file || !supabaseClient) return null;
+      try {
+        const compressedBlob = await compressImageFile(file, 600, 0.8);
+        const fileName = `children/child_${childId || 'new'}_${Date.now()}.jpg`;
+
+        const { data, error } = await supabaseClient.storage
+          .from('sunday_school_media')
+          .upload(fileName, compressedBlob, {
+            cacheControl: '3600',
+            upsert: true,
+            contentType: 'image/jpeg'
+          });
+
+        if (error) {
+          console.warn('[Storage upload notice]:', error);
+          return new Promise((resolve) => {
+            const r = new FileReader();
+            r.onload = () => resolve(r.result);
+            r.onerror = () => resolve(null);
+            r.readAsDataURL(compressedBlob);
+          });
+        }
+
+        const { data: publicData } = supabaseClient.storage
+          .from('sunday_school_media')
+          .getPublicUrl(fileName);
+
+        return publicData?.publicUrl || null;
+      } catch (err) {
+        console.warn('Upload image error:', err);
+        return null;
+      }
+    }
+
+    function openChildModal(childId = null) {
+      const isEdit = !!childId;
+      const child = isEdit ? cacheChildren.find(c => c.id === childId) : null;
+      const isAdmin = currentRole === 'admin';
+
+      // Servant is restricted strictly to assigned families
+      const availableFamilies = isAdmin 
+        ? cacheFamilies 
+        : cacheFamilies.filter(f => assignedFamilyIds.includes(f.id));
+
+      if (!isAdmin && availableFamilies.length === 0) {
+        alert('عذراً، لم يتم إسناد أي أسرة لحسابك بعد. تواصل مع مدير النظام لتحديد الأسرة الموكلة إليك.');
+        return;
+      }
+
+      pendingChildPhotoFile = null;
+      pendingChildPhotoDelete = false;
+
+      let initialFamId = child ? child.family_id : (availableFamilies[0]?.id || '');
+      let selectedFam = availableFamilies.find(f => f.id === initialFamId) || availableFamilies[0];
+      let initialStgId = child ? child.stage_id : (selectedFam?.stage_id || cacheStages[0]?.id || '');
+
+      const modalContainer = document.createElement('div');
+      modalContainer.id = 'modal-child-form';
+      modalContainer.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm';
+      modalContainer.innerHTML = `
+        <div class="bg-white w-full max-w-lg rounded-3xl p-6 border border-church-200 shadow-2xl space-y-4 text-right max-h-[92vh] overflow-y-auto">
+          <!-- Header -->
+          <div class="flex items-center justify-between border-b border-church-100 pb-3">
+            <div>
+              <h3 class="font-black text-base text-slate-900">
+                ${isEdit ? `✏️ تعديل بيانات الطفل: ${child.full_name}` : '➕ إضافة طفل جديد للخدمة'}
+              </h3>
+              <p class="text-[11px] text-slate-500 mt-0.5">
+                ${isAdmin ? 'لوحة تحكم الأدمن — كامل الصلاحيات' : `خادم: مقتصر على الأسر الموكلة إليك (${availableFamilies.map(f=>f.name).join('، ')})`}
+              </p>
+            </div>
+            <button onclick="document.getElementById('modal-child-form').remove()" class="text-slate-400 hover:text-slate-600 font-bold p-1 rounded-full">✕</button>
+          </div>
+
+          <form onsubmit="handleSaveChildForm(event, '${childId || ''}')" class="space-y-4">
+            <!-- Photo Upload & Avatar Preview -->
+            <div class="flex flex-col items-center justify-center p-4 bg-church-50/60 rounded-2xl border border-dashed border-church-300">
+              <div class="relative w-24 h-24 rounded-full bg-church-100 border-2 border-church-300 flex items-center justify-center overflow-hidden shadow-sm mb-3">
+                <img id="child-preview-img" src="${child?.image_url || ''}" class="${child?.image_url ? '' : 'hidden'} w-full h-full object-cover" />
+                <span id="child-preview-placeholder" class="${child?.image_url ? 'hidden' : ''} text-3xl font-black text-church-700">
+                  ${(child?.full_name || '👶').charAt(0)}
+                </span>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <label class="cursor-pointer px-3.5 py-1.5 rounded-xl bg-white border border-church-300 text-church-800 hover:bg-church-50 text-xs font-bold shadow-2xs transition-all active:scale-95">
+                  📷 ${child?.image_url ? 'تغيير الصورة' : 'رفع صورة للطفل'}
+                  <input type="file" accept="image/*" class="hidden" onchange="previewChildImageFile(this)" />
+                </label>
+                <button type="button" id="child-remove-img-btn" onclick="removeChildImage()" class="${child?.image_url ? '' : 'hidden'} px-2.5 py-1.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 hover:bg-rose-100 text-xs font-bold">
+                  حذف الصورة
+                </button>
+              </div>
+              <span class="text-[10px] text-slate-400 mt-1">اختياري - يتم ضغط وتصغير الصورة تلقائياً لسرعة الأداء</span>
+            </div>
+
+            <!-- Full Name (Required) -->
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">اسم الطفل بالكامل <span class="text-rose-500">*</span>:</label>
+              <input id="cf-name" type="text" required value="${child?.full_name || ''}" placeholder="مثال: بولا عماد عزيز" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500 font-bold" />
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <!-- Family -->
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">الأسرة <span class="text-rose-500">*</span>:</label>
+                <select id="cf-family" required onchange="handleModalFamilyChange(this.value)" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 bg-white font-bold">
+                  ${availableFamilies.map(f => `
+                    <option value="${f.id}" data-stage="${f.stage_id}" ${f.id === initialFamId ? 'selected' : ''}>
+                      ${f.name} (${f.stage?.name || ''})
+                    </option>
+                  `).join('')}
+                </select>
+                ${!isAdmin && availableFamilies.length === 1 ? '<span class="text-[10px] text-church-700 block mt-0.5">أسرتك المسندة إليك</span>' : ''}
+              </div>
+
+              <!-- Stage -->
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">المرحلة الدراسية:</label>
+                <select id="cf-stage" ${isAdmin ? '' : 'disabled'} class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 ${isAdmin ? 'bg-white' : 'bg-slate-100 text-slate-500'} font-bold">
+                  ${cacheStages.map(s => `
+                    <option value="${s.id}" ${s.id === initialStgId ? 'selected' : ''}>${s.name}</option>
+                  `).join('')}
+                </select>
+                ${!isAdmin ? '<span class="text-[10px] text-slate-400 block mt-0.5">تحدد تلقائياً بناءً على الأسرة</span>' : ''}
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <!-- Birth Date -->
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">تاريخ الميلاد (اختياري):</label>
+                <input id="cf-birth" type="date" value="${child?.birth_date || ''}" class="w-full text-xs px-3.5 py-2 rounded-xl border border-church-300 bg-white" />
+              </div>
+
+              <!-- Phone / Contact -->
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">رقم الهاتف / بيانات التواصل:</label>
+                <input id="cf-phone" type="tel" value="${child?.phone || ''}" placeholder="مثال: 01223456789" class="w-full text-xs px-3.5 py-2 rounded-xl border border-church-300 bg-white font-mono" />
+              </div>
+            </div>
+
+            ${isAdmin ? `
+              <!-- Active status toggle (Admin only) -->
+              <div class="p-3 bg-slate-50 rounded-2xl border border-church-200 flex items-center justify-between">
+                <div>
+                  <span class="text-xs font-bold text-slate-800 block">حالة قيد الطفل:</span>
+                  <span class="text-[10px] text-slate-500">الطفل المعطل لا يظهر في قوائم تسجيل النقاط النشطة</span>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="cf-active" class="sr-only peer" ${(!isEdit || child?.is_active) ? 'checked' : ''} />
+                  <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+                </label>
+              </div>
+            ` : ''}
+
+            <!-- Actions -->
+            <div class="pt-3 border-t border-church-100 flex items-center justify-end gap-2">
+              <button type="button" onclick="document.getElementById('modal-child-form').remove()" class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100">
+                إلغاء
+              </button>
+              <button type="submit" id="btn-submit-child" class="px-6 py-2.5 rounded-xl bg-church-600 hover:bg-church-700 text-white text-xs font-black shadow-md transition-all active:scale-98">
+                ${isEdit ? '✓ حفظ التعديلات' : '✓ إضافة الطفل'}
+              </button>
+            </div>
+          </form>
+        </div>
+      `;
+      document.body.appendChild(modalContainer);
+    }
+
+    function previewChildImageFile(input) {
+      if (!input.files || !input.files[0]) return;
+      const file = input.files[0];
+      pendingChildPhotoFile = file;
+      pendingChildPhotoDelete = false;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const preview = document.getElementById('child-preview-img');
+        const placeholder = document.getElementById('child-preview-placeholder');
+        const removeBtn = document.getElementById('child-remove-img-btn');
+        if (preview) {
+          preview.src = e.target.result;
+          preview.classList.remove('hidden');
+        }
+        if (placeholder) placeholder.classList.add('hidden');
+        if (removeBtn) removeBtn.classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function removeChildImage() {
+      pendingChildPhotoFile = null;
+      pendingChildPhotoDelete = true;
+      const preview = document.getElementById('child-preview-img');
+      const placeholder = document.getElementById('child-preview-placeholder');
+      const removeBtn = document.getElementById('child-remove-img-btn');
+      if (preview) {
+        preview.src = '';
+        preview.classList.add('hidden');
+      }
+      if (placeholder) placeholder.classList.remove('hidden');
+      if (removeBtn) removeBtn.classList.add('hidden');
+    }
+
+    function handleModalFamilyChange(famId) {
+      const fam = cacheFamilies.find(f => f.id === famId);
+      const stageSelect = document.getElementById('cf-stage');
+      if (fam && stageSelect) {
+        stageSelect.value = fam.stage_id;
+      }
+    }
+
+    async function handleSaveChildForm(e, childId) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-submit-child');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'جاري المعالجة والرفع...';
+      }
+
+      const isEdit = !!childId;
+      const full_name = document.getElementById('cf-name').value.trim();
+      const family_id = document.getElementById('cf-family').value;
+      const stage_id = document.getElementById('cf-stage').value;
+      const birth_date = document.getElementById('cf-birth')?.value || null;
+      const phone = document.getElementById('cf-phone')?.value.trim() || null;
+      const activeCheckbox = document.getElementById('cf-active');
+      const is_active = activeCheckbox ? activeCheckbox.checked : true;
+
+      // Security check on client
+      if (currentRole !== 'admin' && !assignedFamilyIds.includes(family_id)) {
+        alert('غير مصرح لك بإضافة طفل لأسرة غير مسندة إليك');
+        if (btn) { btn.disabled = false; btn.textContent = '✓ حفظ'; }
+        return;
+      }
+
+      try {
+        let image_url = isEdit ? (cacheChildren.find(c => c.id === childId)?.image_url || null) : null;
+
+        if (pendingChildPhotoDelete) {
+          image_url = null;
+        }
+
+        if (pendingChildPhotoFile) {
+          const uploaded = await uploadChildPhoto(pendingChildPhotoFile, childId);
+          if (uploaded) {
+            image_url = uploaded;
+          }
+        }
+
+        const payload = {
+          full_name,
+          family_id,
+          stage_id,
+          birth_date,
+          phone,
+          is_active,
+          image_url,
+          updated_at: new Date().toISOString()
+        };
+
+        if (isEdit) {
+          const { data, error } = await supabaseClient
+            .from('children')
+            .update(payload)
+            .eq('id', childId)
+            .select();
+
+          if (error) throw error;
+
+          const idx = cacheChildren.findIndex(c => c.id === childId);
+          if (idx !== -1) {
+            cacheChildren[idx] = {
+              ...cacheChildren[idx],
+              ...payload,
+              family: cacheFamilies.find(f => f.id === family_id),
+              stage: cacheStages.find(s => s.id === stage_id)
+            };
+          }
+          showToast(`تم تعديل بيانات الطفل (${full_name}) بنجاح`, true);
+        } else {
+          const { data, error } = await supabaseClient
+            .from('children')
+            .insert({
+              ...payload,
+              code: 'KID-' + Math.floor(1000 + Math.random() * 9000)
+            })
+            .select();
+
+          if (error) throw error;
+
+          const newKid = (data && data[0]) ? data[0] : {
+            id: 'child-' + Date.now(),
+            ...payload
+          };
+          newKid.family = cacheFamilies.find(f => f.id === family_id);
+          newKid.stage = cacheStages.find(s => s.id === stage_id);
+
+          cacheChildren.unshift(newKid);
+          showToast(`تمت إضافة الطفل (${full_name}) بنجاح`, true);
+        }
+
+        document.getElementById('modal-child-form')?.remove();
+        refreshCurrentView();
+        loadAllData().then(() => refreshCurrentView());
+      } catch (err) {
+        console.error('Save child error:', err);
+        alert(err.message || 'فشل حفظ بيانات الطفل، تأكد من صلاحيات الأسرة في قاعدة البيانات');
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = isEdit ? '✓ حفظ التعديلات' : '✓ إضافة الطفل';
+        }
+      }
+    }
+
+    async function handleDeleteChild(childId) {
+      const child = cacheChildren.find(c => c.id === childId);
+      if (!child) return;
+
+      if (currentRole !== 'admin') {
+        alert('عذراً، فقط مدير النظام (Admin) يملك صلاحية حذف طفل نهائياً.');
+        return;
+      }
+
+      if (!confirm(`هل أنت متأكد من حذف الطفل (${child.full_name}) نهائياً؟`)) return;
+
+      try {
+        const { error } = await supabaseClient.from('children').delete().eq('id', childId);
+        if (error) throw error;
+
+        cacheChildren = cacheChildren.filter(c => c.id !== childId);
+        showToast(`تم حذف الطفل (${child.full_name})`, true);
+        refreshCurrentView();
+        loadAllData().then(() => refreshCurrentView());
+      } catch (err) {
+        alert(err.message || 'فشل حذف الطفل');
+      }
+    }
+
+    // ===========================================================================
+    // 7. COMPLETE ADMIN PANEL WITH ALL CRUD MANAGERS
+    // ===========================================================================
+    function renderAdminDashboard() {
+      const stats = computeTodayStats();
+      const root = document.getElementById('app-root');
+
+      root.innerHTML = `
+        <div class="min-h-screen bg-[#fbf7ee] flex flex-col">
+          <!-- Admin Navbar -->
+          <header class="bg-white border-b border-church-200 px-6 py-4 flex items-center justify-between sticky top-0 z-30 shadow-xs">
+            <div class="flex items-center gap-3">
+              <img src="church-logo.jpg" onerror="this.onerror=null; this.src='church-logo.svg';" class="w-11 h-11 rounded-full border border-amber-300 object-cover shadow-xs shrink-0" alt="شعار الكنيسة" />
+              <div>
+                <h2 class="text-lg font-black text-church-950">لوحة إدارة مدارس الأحد</h2>
+                <span class="px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 font-bold text-[10px]">👑 مدير النظام (${currentProfile?.full_name})</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="realtime-indicator-badge inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${isRealtimeConnected ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' : 'bg-amber-50 border border-amber-200 text-amber-800'}">
+                <span class="w-2 h-2 rounded-full ${isRealtimeConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}"></span>
+                <span>${isRealtimeConnected ? 'بث مباشر Realtime' : 'جاري الاتصال...'}</span>
+              </div>
+              <button onclick="openFamilyPointModal()" class="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5">
+                <span>⭐ إضافة نقاط للأسرة</span>
+              </button>
+              <button onclick="isDisplayOnlyMode=true; renderDisplayScreen();" class="px-3 py-1.5 rounded-xl bg-church-100 text-church-900 font-bold text-xs border border-church-300">
+                🖥️ شاشة العرض TV
+              </button>
+              <button onclick="handleSignOut()" class="px-3 py-1.5 rounded-xl bg-rose-50 text-rose-700 font-bold text-xs border border-rose-200">
+                خروج
+              </button>
+            </div>
+          </header>
+
+          <!-- Admin Navigation Tabs -->
+          <div class="bg-white border-b border-church-200 px-6 overflow-x-auto no-scrollbar flex gap-2 sm:gap-6 text-xs font-bold">
+            <button onclick="currentAdminTab='dashboard'; renderAdminDashboard();" class="py-3 border-b-2 shrink-0 ${currentAdminTab==='dashboard'?'border-church-600 text-church-900':'border-transparent text-slate-500'}">
+              📊 لوحة المؤشرات
+            </button>
+            <button onclick="currentAdminTab='users'; renderAdminDashboard();" class="py-3 border-b-2 shrink-0 ${currentAdminTab==='users'?'border-church-600 text-church-900':'border-transparent text-slate-500'}">
+              👥 المستخدمين والخدام (${cacheProfiles.length})
+            </button>
+            <button onclick="currentAdminTab='stages'; renderAdminDashboard();" class="py-3 border-b-2 shrink-0 ${currentAdminTab==='stages'?'border-church-600 text-church-900':'border-transparent text-slate-500'}">
+              📚 المراحل (${cacheStages.length})
+            </button>
+            <button onclick="currentAdminTab='families'; renderAdminDashboard();" class="py-3 border-b-2 shrink-0 ${currentAdminTab==='families'?'border-church-600 text-church-900':'border-transparent text-slate-500'}">
+              🏠 الأسر (${cacheFamilies.length})
+            </button>
+            <button onclick="currentAdminTab='children'; renderAdminDashboard();" class="py-3 border-b-2 shrink-0 ${currentAdminTab==='children'?'border-church-600 text-church-900':'border-transparent text-slate-500'}">
+              🧒 الأطفال (${cacheChildren.length})
+            </button>
+            <button onclick="currentAdminTab='rules'; renderAdminDashboard();" class="py-3 border-b-2 shrink-0 ${currentAdminTab==='rules'?'border-church-600 text-church-900':'border-transparent text-slate-500'}">
+              ⚙️ قواعد النقاط (${cacheRules.length})
+            </button>
+            <button onclick="currentAdminTab='audit'; renderAdminDashboard();" class="py-3 border-b-2 shrink-0 ${currentAdminTab==='audit'?'border-church-600 text-church-900':'border-transparent text-slate-500'}">
+              📜 سجل العمليات
+            </button>
+          </div>
+
+          <!-- Tab Content Area -->
+          <main class="max-w-7xl mx-auto w-full p-4 sm:p-6 space-y-6 flex-1">
+            ${
+              currentAdminTab === 'dashboard' ? renderAdminDashboardStats(stats) :
+              currentAdminTab === 'users' ? renderAdminUsers() :
+              currentAdminTab === 'stages' ? renderAdminStages() :
+              currentAdminTab === 'families' ? renderAdminFamilies(stats) :
+              currentAdminTab === 'children' ? renderAdminChildren(stats) :
+              currentAdminTab === 'rules' ? renderAdminRules() :
+              renderAdminAudit()
+            }
+          </main>
+        </div>
+      `;
+    }
+
+    // 7.1 STATS TAB
+    function renderAdminDashboardStats(stats) {
+      return `
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="bg-white p-5 rounded-3xl border border-church-200 shadow-sm">
+            <span class="text-xs text-slate-500 font-bold block">إجمالي الأولاد</span>
+            <span class="text-3xl font-black text-slate-900 block mt-1">${cacheChildren.length}</span>
+          </div>
+          <div class="bg-white p-5 rounded-3xl border border-church-200 shadow-sm">
+            <span class="text-xs text-slate-500 font-bold block">الأسر</span>
+            <span class="text-3xl font-black text-slate-900 block mt-1">${cacheFamilies.length}</span>
+          </div>
+          <div class="bg-white p-5 rounded-3xl border border-church-200 shadow-sm">
+            <span class="text-xs text-slate-500 font-bold block">الخدام المسجلين</span>
+            <span class="text-3xl font-black text-slate-900 block mt-1">${cacheProfiles.length}</span>
+          </div>
+          <div class="bg-white p-5 rounded-3xl border border-church-200 shadow-sm">
+            <span class="text-xs text-slate-500 font-bold block">نقاط اليوم الكلية</span>
+            <span class="text-3xl font-black text-purple-700 block mt-1">${stats.grandTotalToday}</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm">
+            <h3 class="font-black text-base text-slate-900 mb-4">🏆 أبطال اليوم (Top 3)</h3>
+            <div class="space-y-3">
+              ${stats.top3ChildrenToday.map((entry, i) => `
+                <div class="p-3 bg-church-50 rounded-2xl flex items-center justify-between">
+                  <div class="flex items-center gap-3">
+                    <span class="text-xl">${i===0?'🥇':i===1?'🥈':'🥉'}</span>
+                    <div>
+                      <div class="font-bold text-xs text-slate-900">${entry.child.full_name}</div>
+                      <div class="text-[10px] text-slate-500">${entry.child.family?.name || ''}</div>
+                    </div>
+                  </div>
+                  <span class="text-base font-black text-amber-600">${entry.pointsToday} نقطة</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+
+          <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm">
+            <h3 class="font-black text-base text-slate-900 mb-4">⏱️ آخر العمليات لحظياً</h3>
+            <div class="space-y-2 max-h-64 overflow-y-auto">
+              ${cacheLogs.slice(0, 6).map(l => `
+                <div class="p-2.5 bg-church-50/60 rounded-xl flex items-center justify-between text-xs">
+                  <div>
+                    <span class="font-bold text-slate-900">${l.child?.full_name}</span>
+                    <span class="text-slate-400 font-normal">(${l.reason})</span>
+                  </div>
+                  <span class="font-black ${l.points>0?'text-emerald-600':'text-rose-600'}">${l.points>0?'+'+l.points:l.points}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // 7.2 USERS MANAGER TAB
+    function renderAdminUsers() {
+      return `
+        <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="font-black text-base text-slate-900">إدارة المستخدمين، الأدوار، واعتماد الخدام</h3>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-right text-xs">
+              <thead class="bg-church-50 text-slate-600 font-bold border-b border-church-200">
+                <tr>
+                  <th class="p-3">الاسم</th>
+                  <th class="p-3">البريد الإلكتروني</th>
+                  <th class="p-3">الدور (Role)</th>
+                  <th class="p-3">الحالة</th>
+                  <th class="p-3">الأسر المخصصة</th>
+                  <th class="p-3 text-left">إجراءات</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-church-100">
+                ${cacheProfiles.map(p => {
+                  const myFamIds = cacheFamilyServants.filter(fs => fs.servant_id === p.id).map(fs => fs.family_id);
+                  const myFamNames = cacheFamilies.filter(f => myFamIds.includes(f.id)).map(f => f.name).join('، ');
+
+                  return `
+                    <tr class="hover:bg-church-50/40">
+                      <td class="p-3 font-bold text-slate-900">${p.full_name}</td>
+                      <td class="p-3 text-slate-500 font-mono">${p.email}</td>
+                      <td class="p-3">
+                        <select onchange="updateUserRole('${p.id}', this.value)" class="text-xs bg-white border border-church-300 rounded-lg px-2 py-1 font-bold ${p.role==='admin'?'text-amber-700':p.role==='display'?'text-blue-700':'text-slate-700'}">
+                          <option value="admin" ${p.role==='admin'?'selected':''}>👑 أدمن</option>
+                          <option value="servant" ${p.role==='servant'?'selected':''}>🙋 خادم</option>
+                          <option value="display" ${p.role==='display'?'selected':''}>🖥️ شاشة عرض</option>
+                        </select>
+                      </td>
+                      <td class="p-3">
+                        ${p.is_approved ? `
+                          <span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold text-[10px]">معتمد</span>
+                        ` : `
+                          <button onclick="approveUser('${p.id}')" class="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-bold text-[10px] shadow-xs">
+                            ✓ اعتماد الخادم
+                          </button>
+                        `}
+                      </td>
+                      <td class="p-3 text-slate-600">
+                        ${p.role === 'admin' ? '<span class="text-amber-600 font-bold">جميع الأسر</span>' : (myFamNames || '<span class="text-slate-400">لا يوجد</span>')}
+                      </td>
+                      <td class="p-3 text-left">
+                        ${p.role === 'servant' ? `
+                          <button onclick="openAssignFamiliesModal('${p.id}', '${p.full_name}')" class="px-2.5 py-1 bg-church-600 text-white rounded-lg font-bold text-[10px] hover:bg-church-700">
+                            تخصيص الأسر
+                          </button>
+                        ` : ''}
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    async function approveUser(userId) {
+      try {
+        // Try calling the stored RPC which confirms email in auth.users AND approves profile
+        const { error: rpcErr } = await supabaseClient.rpc('approve_user', { target_user_id: userId });
+        if (rpcErr) {
+          console.warn('RPC approve_user note:', rpcErr);
+          // Fallback direct update
+          const { error } = await supabaseClient.from('profiles').update({ is_approved: true }).eq('id', userId);
+          if (error) throw error;
+        }
+        await loadAllData();
+        renderAdminDashboard();
+      } catch (err) {
+        alert(err.message || 'فشل اعتماد المستخدم');
+      }
+    }
+
+    async function updateUserRole(userId, newRole) {
+      try {
+        const { error } = await supabaseClient.from('profiles').update({ role: newRole }).eq('id', userId);
+        if (error) throw error;
+        await loadAllData();
+        renderAdminDashboard();
+      } catch (err) {
+        alert(err.message || 'فشل تحديث الدور');
+      }
+    }
+
+    function openAssignFamiliesModal(servantId, servantName) {
+      const currentAssigned = cacheFamilyServants.filter(fs => fs.servant_id === servantId).map(fs => fs.family_id);
+
+      const modal = document.createElement('div');
+      modal.id = 'modal-assign-box';
+      modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm';
+      modal.innerHTML = `
+        <div class="bg-white w-full max-w-md rounded-3xl p-6 border border-church-200 shadow-2xl space-y-4 text-right">
+          <div class="flex items-center justify-between border-b border-church-100 pb-3">
+            <h3 class="font-black text-sm text-slate-900">تخصيص الأسر للخادم: ${servantName}</h3>
+            <button onclick="document.getElementById('modal-assign-box').remove()" class="text-slate-400 hover:text-slate-600">✕</button>
+          </div>
+
+          <div class="space-y-2 max-h-60 overflow-y-auto">
+            ${cacheFamilies.map(f => `
+              <label class="flex items-center gap-2 p-2.5 rounded-xl border border-church-100 hover:bg-church-50/50 cursor-pointer">
+                <input type="checkbox" value="${f.id}" ${currentAssigned.includes(f.id)?'checked':''} class="fam-check rounded text-church-600 focus:ring-church-500" />
+                <span class="text-xs font-bold text-slate-800">${f.name}</span>
+                <span class="text-[10px] text-slate-400 mr-auto">(${f.stage?.name || ''})</span>
+              </label>
+            `).join('')}
+          </div>
+
+          <button onclick="saveFamilyAssignments('${servantId}')" class="w-full py-2.5 rounded-xl bg-church-600 text-white font-bold text-xs shadow-md">
+            حفظ التخصيص
+          </button>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    async function saveFamilyAssignments(servantId) {
+      const checkboxes = document.querySelectorAll('.fam-check:checked');
+      const selectedFamIds = Array.from(checkboxes).map(c => c.value);
+
+      try {
+        await supabaseClient.from('family_servants').delete().eq('servant_id', servantId);
+        if (selectedFamIds.length > 0) {
+          const rows = selectedFamIds.map(fid => ({ servant_id: servantId, family_id: fid }));
+          const { error } = await supabaseClient.from('family_servants').insert(rows);
+          if (error) throw error;
+        }
+        document.getElementById('modal-assign-box')?.remove();
+        await loadAllData();
+        renderAdminDashboard();
+      } catch (err) {
+        alert(err.message || 'فشل حفظ التخصيص');
+      }
+    }
+
+    // 7.3 STAGES MANAGER TAB
+    function renderAdminStages() {
+      return `
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <!-- Add Stage Form -->
+          <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
+            <h3 class="font-black text-sm text-slate-900">➕ إضافة مرحلة جديدة</h3>
+            <form onsubmit="handleCreateStage(event)" class="space-y-3 text-right">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">اسم المرحلة:</label>
+                <input id="stg-name" type="text" required placeholder="مثال: 4 ابتدائي" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500" />
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">ترتيب الظهور:</label>
+                <input id="stg-order" type="number" required value="${cacheStages.length + 1}" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500" />
+              </div>
+              <button type="submit" class="w-full py-2.5 rounded-xl bg-church-600 hover:bg-church-700 text-white font-bold text-xs shadow-md">
+                إضافة المرحلة
+              </button>
+            </form>
+          </div>
+
+          <!-- Stages List -->
+          <div class="md:col-span-2 bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
+            <h3 class="font-black text-sm text-slate-900">المراحل الحالية</h3>
+            <div class="divide-y divide-church-100">
+              ${cacheStages.map(s => {
+                const famCount = cacheFamilies.filter(f => f.stage_id === s.id).length;
+                return `
+                  <div class="py-3 flex items-center justify-between text-xs">
+                    <div>
+                      <span class="font-bold text-slate-900 text-sm">${s.name}</span>
+                      <span class="text-slate-400 mr-2">(ترتيب: ${s.sort_order}) • ${famCount} أسر</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <button onclick="handleDeleteStage('${s.id}', ${famCount})" class="px-2.5 py-1 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold text-[11px]">
+                        حذف
+                      </button>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function handleCreateStage(e) {
+      e.preventDefault();
+      const name = document.getElementById('stg-name').value.trim();
+      const sort_order = parseInt(document.getElementById('stg-order').value) || 0;
+
+      try {
+        const { error } = await supabaseClient.from('stages').insert({ name, sort_order });
+        if (error) throw error;
+        await loadAllData();
+        renderAdminDashboard();
+      } catch (err) {
+        alert(err.message || 'فشل إنشاء المرحلة');
+      }
+    }
+
+    async function handleDeleteStage(stageId, famCount) {
+      if (famCount > 0) {
+        alert('لا يمكن حذف المرحلة لأن هناك أسر مرتبطة بها حالياً.');
+        return;
+      }
+      if (!confirm('هل أنت متأكد من حذف هذه المرحلة؟')) return;
+      try {
+        const { error } = await supabaseClient.from('stages').delete().eq('id', stageId);
+        if (error) throw error;
+        await loadAllData();
+        renderAdminDashboard();
+      } catch (err) {
+        alert(err.message || 'فشل حذف المرحلة');
+      }
+    }
+
+    // 7.4 FAMILIES MANAGER TAB
+    function renderAdminFamilies() {
+      return `
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <!-- Add Family Form -->
+          <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
+            <h3 class="font-black text-sm text-slate-900">➕ إضافة أسرة جديدة</h3>
+            <form onsubmit="handleCreateFamily(event)" class="space-y-3 text-right">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">اسم الأسرة:</label>
+                <input id="fam-name" type="text" required placeholder="مثال: أسرة النور" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500" />
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">المرحلة التابعة لها:</label>
+                <select id="fam-stage" required class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500 bg-white">
+                  ${cacheStages.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                </select>
+              </div>
+              <button type="submit" class="w-full py-2.5 rounded-xl bg-church-600 hover:bg-church-700 text-white font-bold text-xs shadow-md">
+                حفظ الأسرة
+              </button>
+            </form>
+          </div>
+
+          <!-- Families List -->
+          <div class="md:col-span-2 bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-church-100 pb-3">
+              <div>
+                <h3 class="font-black text-sm text-slate-900">الأسر المسجلة (${cacheFamilies.length})</h3>
+                <p class="text-[10px] text-slate-500">إجمالي ومتابعة نقاط الأسر وإمكانية تسجيل نقاط مباشرة</p>
+              </div>
+              <button onclick="openFamilyPointModal()" class="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5 shrink-0">
+                <span>⭐ إضافة نقاط للأسرة</span>
+              </button>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              ${cacheFamilies.map(f => {
+                const kidCount = cacheChildren.filter(c => c.family_id === f.id).length;
+                const famEntry = (stats?.familiesWithPoints || []).find(item => item.family.id === f.id);
+                const ptsToday = famEntry ? famEntry.pointsToday : 0;
+                const ptsTotal = famEntry ? famEntry.pointsTotal : 0;
+
+                return `
+                  <div class="p-4 rounded-2xl border border-church-200 bg-church-50/40 flex flex-col justify-between gap-3">
+                    <div class="flex items-start justify-between">
+                      <div>
+                        <h4 class="font-black text-sm text-slate-900">${f.name}</h4>
+                        <span class="text-[11px] text-church-700 font-bold block">📚 ${f.stage?.name || ''} • ${kidCount} أولاد</span>
+                      </div>
+                      <div class="text-left">
+                        <span class="text-[10px] text-slate-500 block">نقاط اليوم: <b class="${ptsToday > 0 ? 'text-emerald-600' : 'text-slate-700'}">${ptsToday > 0 ? '+' + ptsToday : ptsToday}</b></span>
+                        <span class="text-[10px] text-slate-500 block">الإجمالي: <b class="text-amber-600">${ptsTotal}</b></span>
+                      </div>
+                    </div>
+
+                    <div class="flex items-center justify-end gap-1.5 border-t border-church-100 pt-2.5">
+                      <button onclick="openFamilyPointModal('${f.id}')" title="إضافة نقاط مباشرة لهذه الأسرة" class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs shadow-2xs transition-all active:scale-95 flex items-center gap-1">
+                        <span>⭐ إضافة نقاط</span>
+                      </button>
+                      <button onclick="handleDeleteFamily('${f.id}', ${kidCount})" class="px-2.5 py-1.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold text-[11px]">
+                        حذف
+                      </button>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function handleCreateFamily(e) {
+      e.preventDefault();
+      const name = document.getElementById('fam-name').value.trim();
+      const stage_id = document.getElementById('fam-stage').value;
+
+      try {
+        const { error } = await supabaseClient.from('families').insert({ name, stage_id });
+        if (error) throw error;
+        await loadAllData();
+        renderAdminDashboard();
+      } catch (err) {
+        alert(err.message || 'فشل إنشاء الأسرة');
+      }
+    }
+
+    async function handleDeleteFamily(famId, kidCount) {
+      if (kidCount > 0) {
+        alert('لا يمكن حذف الأسرة لوجود أطفال مسجلين بها.');
+        return;
+      }
+      if (!confirm('هل أنت متأكد من حذف الأسرة؟')) return;
+      try {
+        const { error } = await supabaseClient.from('families').delete().eq('id', famId);
+        if (error) throw error;
+        await loadAllData();
+        renderAdminDashboard();
+      } catch (err) {
+        alert(err.message || 'فشل حذف الأسرة');
+      }
+    }
+
+    // 7.5 CHILDREN MANAGER TAB
+    function renderAdminChildren(stats) {
+      const currentStats = stats || computeTodayStats();
+      const pointsMap = new Map();
+      currentStats.childrenWithPoints.forEach(e => {
+        pointsMap.set(e.child.id, e);
+      });
+
+      return `
+        <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
+          <!-- Top Bar -->
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-church-100 pb-4">
+            <div>
+              <h3 class="font-black text-base text-slate-900">🧒 إدارة الأطفال والمخدومين (${cacheChildren.length})</h3>
+              <p class="text-xs text-slate-500">إضافة وتعديل بيانات الأطفال، رفع الصور، ومتابعة النقاط والحالة</p>
+            </div>
+            <button onclick="openChildModal()" class="px-5 py-2.5 rounded-2xl bg-church-600 hover:bg-church-700 text-white font-black text-xs shadow-md transition-all flex items-center justify-center gap-2 active:scale-95 shrink-0">
+              <span>➕ إضافة طفل جديد</span>
+            </button>
+          </div>
+
+          <!-- Filters & Search Toolbar -->
+          <div class="flex flex-col sm:flex-row items-center justify-between gap-3 bg-church-50/60 p-3 rounded-2xl border border-church-200 text-xs">
+            <div class="flex items-center gap-2 w-full sm:w-auto">
+              <input id="admin-kid-search" oninput="filterAdminKids(this.value)" type="text" placeholder="🔍 بحث بالاسم..." class="px-3.5 py-2 rounded-xl border border-church-300 text-xs w-full sm:w-64 bg-white font-medium" />
+              <select id="admin-kid-family-filter" onchange="filterAdminKidsByFamily(this.value)" class="px-3 py-2 rounded-xl border border-church-300 text-xs bg-white font-bold">
+                <option value="">جميع الأسر</option>
+                ${cacheFamilies.map(f => `<option value="${f.id}">${f.name}</option>`).join('')}
+              </select>
+            </div>
+
+            <div class="text-[11px] text-slate-500 font-bold self-end sm:self-center">
+              النشطون: <span class="font-black text-emerald-600">${cacheChildren.filter(c=>c.is_active).length}</span> • 
+              المعطلون: <span class="font-black text-slate-400">${cacheChildren.filter(c=>!c.is_active).length}</span>
+            </div>
+          </div>
+
+          <!-- Children Table -->
+          <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+            <table class="w-full text-right text-xs">
+              <thead class="bg-church-50 text-slate-600 font-bold border-b border-church-200 sticky top-0 z-10">
+                <tr>
+                  <th class="p-3">الطفل</th>
+                  <th class="p-3">الأسرة</th>
+                  <th class="p-3">المرحلة</th>
+                  <th class="p-3 text-center">نقاط اليوم</th>
+                  <th class="p-3 text-center">الإجمالي</th>
+                  <th class="p-3 text-center">الحالة</th>
+                  <th class="p-3 text-left">إجراءات</th>
+                </tr>
+              </thead>
+              <tbody id="admin-kids-tbody" class="divide-y divide-church-100">
+                ${cacheChildren.map(c => {
+                  const entry = pointsMap.get(c.id);
+                  const ptsToday = entry ? entry.pointsToday : 0;
+                  const ptsTotal = entry ? entry.pointsTotal : 0;
+                  return `
+                    <tr class="admin-kid-row hover:bg-church-50/40 ${!c.is_active ? 'opacity-50 bg-slate-50/50' : ''}" data-name="${c.full_name}" data-family="${c.family_id}">
+                      <td class="p-3">
+                        <div class="flex items-center gap-2.5">
+                          <div class="w-10 h-10 rounded-xl bg-church-100 border border-church-200 flex items-center justify-center font-black text-sm text-church-800 overflow-hidden shrink-0">
+                            ${c.image_url ? `<img src="${c.image_url}" class="w-full h-full object-cover" onerror="this.remove()" />` : (c.full_name || '?').charAt(0)}
+                          </div>
+                          <div>
+                            <span class="font-black text-slate-900 block">${c.full_name}</span>
+                            ${c.phone ? `<span class="text-[10px] text-slate-400 font-mono block">📞 ${c.phone}</span>` : ''}
+                          </div>
+                        </div>
+                      </td>
+                      <td class="p-3 text-church-700 font-bold">${c.family?.name || ''}</td>
+                      <td class="p-3 text-slate-500 font-medium">${c.stage?.name || ''}</td>
+                      <td class="p-3 text-center font-black text-sm ${ptsToday > 0 ? 'text-emerald-600' : (ptsToday < 0 ? 'text-rose-600' : 'text-slate-400')}">
+                        ${ptsToday > 0 ? '+' + ptsToday : ptsToday}
+                      </td>
+                      <td class="p-3 text-center font-black text-sm text-blue-600">
+                        ${ptsTotal}
+                      </td>
+                      <td class="p-3 text-center">
+                        <span class="px-2 py-0.5 rounded-full text-[9px] font-bold ${c.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}">
+                          ${c.is_active ? 'نشط' : 'معطل'}
+                        </span>
+                      </td>
+                      <td class="p-3 text-left">
+                        <div class="flex items-center gap-1.5 justify-end">
+                          <button onclick="openQuickPointModal('${c.id}')" title="تسجيل نقاط" class="px-2.5 py-1 rounded-lg bg-church-50 border border-church-300 text-church-800 hover:bg-church-100 font-bold text-[10px] shadow-2xs">
+                            ★ نقاط
+                          </button>
+                          <button onclick="openChildModal('${c.id}')" title="تعديل كامل" class="px-2.5 py-1 rounded-lg bg-white border border-church-300 text-church-900 hover:bg-church-50 font-bold text-[10px] shadow-2xs">
+                            ✏️ تعديل
+                          </button>
+                          <button onclick="handleDeleteChild('${c.id}')" title="حذف" class="px-2.5 py-1 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold text-[10px]">
+                            🗑️
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function filterAdminKids(q) {
+      const query = q.trim().toLowerCase();
+      const famFilter = document.getElementById('admin-kid-family-filter')?.value || '';
+      document.querySelectorAll('.admin-kid-row').forEach(row => {
+        const name = (row.getAttribute('data-name') || '').toLowerCase();
+        const fam = row.getAttribute('data-family') || '';
+        const matchName = !query || name.includes(query);
+        const matchFam = !famFilter || fam === famFilter;
+        row.style.display = (matchName && matchFam) ? '' : 'none';
+      });
+    }
+
+    function filterAdminKidsByFamily(famId) {
+      const query = (document.getElementById('admin-kid-search')?.value || '').trim().toLowerCase();
+      document.querySelectorAll('.admin-kid-row').forEach(row => {
+        const name = (row.getAttribute('data-name') || '').toLowerCase();
+        const fam = row.getAttribute('data-family') || '';
+        const matchName = !query || name.includes(query);
+        const matchFam = !famId || fam === famId;
+        row.style.display = (matchName && matchFam) ? '' : 'none';
+      });
+    }
+
+    async function handleDeleteChild(childId) {
+      if (!confirm('هل أنت متأكد من حذف بيانات هذا الطفل؟')) return;
+      try {
+        const { error } = await supabaseClient.from('children').delete().eq('id', childId);
+        if (error) throw error;
+        await loadAllData();
+        renderAdminDashboard();
+      } catch (err) {
+        alert(err.message || 'فشل حذف الطفل');
+      }
+    }
+
+    // 7.6 POINT RULES MANAGER TAB
+    function renderAdminRules() {
+      return `
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <!-- Add Rule Form -->
+          <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
+            <h3 class="font-black text-sm text-slate-900">➕ إضافة قاعدة نقاط جديدة</h3>
+            <form onsubmit="handleCreateRule(event)" class="space-y-3 text-right">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">اسم البند / القاعدة:</label>
+                <input id="rule-title" type="text" required placeholder="مثال: حفظ آية" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500" />
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">نوع العملية:</label>
+                <select id="rule-type" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500 bg-white font-bold">
+                  <option value="add">➕ إضافة نقاط (تشجيع)</option>
+                  <option value="deduct">➖ خصم نقاط (تنبيه)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">قيمة النقاط (موجب):</label>
+                <input id="rule-points" type="number" min="1" max="100" required placeholder="مثال: 3" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500 font-bold" />
+              </div>
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">الوصف (اختياري):</label>
+                <input id="rule-desc" type="text" placeholder="ملاحظات حول طريقة الاحتساب..." class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500" />
+              </div>
+              <button type="submit" class="w-full py-3 rounded-xl bg-church-600 hover:bg-church-700 text-white font-black text-xs shadow-md transition-all active:scale-98">
+                ✓ حفظ القاعدة في Supabase
+              </button>
+            </form>
+          </div>
+
+          <!-- Rules List -->
+          <div class="md:col-span-2 bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="font-black text-sm text-slate-900">قواعد النقاط في النظام (${cacheRules.length})</h3>
+              <span class="text-[11px] text-slate-500 font-bold">
+                المفعلة: <span class="text-emerald-600 font-black">${cacheRules.filter(r => r.is_active).length}</span> • 
+                المعطلة: <span class="text-slate-400 font-black">${cacheRules.filter(r => !r.is_active).length}</span>
+              </span>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[600px] overflow-y-auto">
+              ${cacheRules.map(r => {
+                const rTitle = r.name || r.title;
+                const isAdd = r.type === 'add';
+                return `
+                  <div class="p-4 rounded-2xl border transition-all ${r.is_active ? (isAdd ? 'bg-emerald-50/40 border-emerald-200' : 'bg-rose-50/40 border-rose-200') : 'bg-slate-100/70 border-slate-200 opacity-60'} flex flex-col justify-between gap-3">
+                    <div class="flex items-start justify-between gap-2">
+                      <div class="flex items-center gap-2.5">
+                        <span class="w-10 h-10 rounded-xl font-black text-sm flex items-center justify-center text-white shadow-xs ${r.is_active ? (isAdd ? 'bg-emerald-600' : 'bg-rose-600') : 'bg-slate-500'}">
+                          ${isAdd ? '+' + Math.abs(r.points) : '-' + Math.abs(r.points)}
+                        </span>
+                        <div>
+                          <h4 class="font-black text-xs text-slate-900">${rTitle}</h4>
+                          <p class="text-[10px] text-slate-500 mt-0.5">${r.description || 'بدون وصف'}</p>
+                        </div>
+                      </div>
+                      <span class="px-2 py-0.5 rounded-full text-[9px] font-bold ${r.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}">
+                        ${r.is_active ? 'مفعلة' : 'معطلة'}
+                      </span>
+                    </div>
+
+                    <div class="flex items-center justify-between border-t border-black/5 pt-2 text-[10px] font-bold">
+                      <button onclick="toggleRuleActive('${r.id}', ${!r.is_active})" class="px-2 py-1 rounded-lg border ${r.is_active ? 'border-amber-300 text-amber-800 hover:bg-amber-50' : 'border-emerald-300 text-emerald-800 hover:bg-emerald-50'}">
+                        ${r.is_active ? '⏸️ تعطيل' : '▶️ تفعيل'}
+                      </button>
+
+                      <div class="flex items-center gap-1.5">
+                        <button onclick="openEditRuleModal('${r.id}')" class="px-2.5 py-1 rounded-lg bg-white border border-church-300 text-church-900 hover:bg-church-50 shadow-2xs">
+                          ✏️ تعديل
+                        </button>
+                        <button onclick="handleDeleteRule('${r.id}')" class="px-2.5 py-1 rounded-lg bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 shadow-2xs">
+                          🗑️ حذف
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function handleCreateRule(e) {
+      e.preventDefault();
+      const title = document.getElementById('rule-title').value.trim();
+      const type = document.getElementById('rule-type').value;
+      let rawPoints = Math.abs(parseInt(document.getElementById('rule-points').value) || 1);
+      const points = (type === 'deduct') ? -rawPoints : rawPoints;
+      const description = document.getElementById('rule-desc').value.trim();
+
+      try {
+        const { error } = await supabaseClient.from('point_rules').insert({
+          title,
+          name: title,
+          type,
+          points,
+          description,
+          is_active: true
+        });
+        if (error) throw error;
+        showToast(`تمت إضافة قاعدة (${title}) بنجاح`, true);
+        await loadAllData();
+        renderAdminDashboard();
+      } catch (err) {
+        alert(err.message || 'فشل حفظ القاعدة');
+      }
+    }
+
+    async function toggleRuleActive(ruleId, newActiveState) {
+      try {
+        const { error } = await supabaseClient.from('point_rules').update({ is_active: newActiveState }).eq('id', ruleId);
+        if (error) throw error;
+        showToast(newActiveState ? 'تم تفعيل القاعدة بنجاح' : 'تم تعطيل القاعدة بنجاح', true);
+        await loadAllData();
+        renderAdminDashboard();
+      } catch (err) {
+        alert(err.message || 'فشل تغيير حالة القاعدة');
+      }
+    }
+
+    function openEditRuleModal(ruleId) {
+      const rule = cacheRules.find(r => r.id === ruleId);
+      if (!rule) return;
+
+      const rTitle = rule.name || rule.title;
+      const pts = Math.abs(rule.points);
+
+      const modal = document.createElement('div');
+      modal.id = 'modal-edit-rule';
+      modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm';
+      modal.innerHTML = `
+        <div class="bg-white w-full max-w-md rounded-3xl p-6 border border-church-200 shadow-2xl space-y-4 text-right">
+          <div class="flex items-center justify-between border-b border-church-100 pb-3">
+            <h3 class="font-black text-sm text-slate-900">تعديل قاعدة النقاط: ${rTitle}</h3>
+            <button onclick="document.getElementById('modal-edit-rule').remove()" class="text-slate-400 hover:text-slate-600 font-bold">✕</button>
+          </div>
+
+          <form onsubmit="handleSaveEditRule(event, '${rule.id}')" class="space-y-3">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">اسم البند:</label>
+              <input id="edit-rule-title" type="text" required value="${rTitle}" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500" />
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">نوع العملية:</label>
+                <select id="edit-rule-type" class="w-full text-xs px-3 py-2.5 rounded-xl border border-church-300 bg-white font-bold">
+                  <option value="add" ${rule.type==='add'?'selected':''}>➕ إضافة</option>
+                  <option value="deduct" ${rule.type==='deduct'?'selected':''}>➖ خصم</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-700 mb-1">النقاط (موجب):</label>
+                <input id="edit-rule-points" type="number" min="1" max="100" required value="${pts}" class="w-full text-xs px-3 py-2.5 rounded-xl border border-church-300 font-bold text-center" />
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">الوصف:</label>
+              <input id="edit-rule-desc" type="text" value="${rule.description || ''}" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300" />
+            </div>
+
+            <div class="pt-2 flex items-center justify-end gap-2">
+              <button type="button" onclick="document.getElementById('modal-edit-rule').remove()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100">
+                إلغاء
+              </button>
+              <button type="submit" class="px-5 py-2 rounded-xl bg-church-600 hover:bg-church-700 text-white text-xs font-black shadow-md">
+                حفظ التعديلات
+              </button>
+            </div>
+          </form>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    async function handleSaveEditRule(e, ruleId) {
+      e.preventDefault();
+      const title = document.getElementById('edit-rule-title').value.trim();
+      const type = document.getElementById('edit-rule-type').value;
+      let rawPoints = Math.abs(parseInt(document.getElementById('edit-rule-points').value) || 1);
+      const points = (type === 'deduct') ? -rawPoints : rawPoints;
+      const description = document.getElementById('edit-rule-desc').value.trim();
+
+      try {
+        const { error } = await supabaseClient.from('point_rules').update({
+          title,
+          name: title,
+          type,
+          points,
+          description,
+          updated_at: new Date().toISOString()
+        }).eq('id', ruleId);
+
+        if (error) throw error;
+        document.getElementById('modal-edit-rule')?.remove();
+        showToast('تم تعديل قاعدة النقاط بنجاح', true);
+        await loadAllData();
+        renderAdminDashboard();
+      } catch (err) {
+        alert(err.message || 'فشل تعديل القاعدة');
+      }
+    }
+
+    async function handleDeleteRule(ruleId) {
+      if (!confirm('هل تريد حذف قاعدة النقاط هذه؟ إذا كانت مرتبطة بسجلات سابقة سيتم تعطيلها أو إزالتها.')) return;
+      try {
+        const { error } = await supabaseClient.from('point_rules').delete().eq('id', ruleId);
+        if (error) {
+          // If foreign key constraint prevents deletion, offer to disable it
+          if (confirm('هذه القاعدة مرتبطة بعمليات مسجلة سابقاً، هل تريد تعطيلها بدلاً من الحذف؟')) {
+            await toggleRuleActive(ruleId, false);
+            return;
+          }
+          throw error;
+        }
+        showToast('تم حذف قاعدة النقاط', true);
+        await loadAllData();
+        renderAdminDashboard();
+      } catch (err) {
+        alert(err.message || 'فشل حذف القاعدة');
+      }
+    }
+
+    // 7.7 AUDIT LOGS TAB (WITH ADVANCED MULTI-FIELD FILTERS)
+    let filteredAuditLogs = null;
+
+    function renderAdminAudit() {
+      const logs = filteredAuditLogs !== null ? filteredAuditLogs : cacheLogs;
+      const servantsList = cacheProfiles.filter(p => p.role === 'servant' || p.role === 'admin');
+
+      return `
+        <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-church-100 pb-4">
+            <div>
+              <h3 class="font-black text-base text-slate-900">📋 سجل النقاط وعمليات التدقيق</h3>
+              <p class="text-xs text-slate-500">عرض العمليات لحظياً من Supabase مع إمكانية التصفية المتقدمة</p>
+            </div>
+            <span class="text-xs font-bold text-church-800 bg-church-50 border border-church-200 px-3 py-1 rounded-xl">
+              إجمالي المعروض: <span id="audit-count" class="font-black">${logs.length}</span> عملية
+            </span>
+          </div>
+
+          <!-- FILTERS TOOLBAR -->
+          <div class="p-4 bg-church-50/60 rounded-2xl border border-church-200 space-y-3">
+            <div class="text-xs font-black text-church-900 flex items-center justify-between">
+              <span>🔍 تصفية وفلترة العمليات:</span>
+              <button onclick="resetAuditFilters()" class="text-church-600 hover:text-church-800 text-[11px] underline">
+                إعادة ضبط الفلاتر
+              </button>
+            </div>
+
+            <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+              <!-- 1. Child search -->
+              <div>
+                <label class="block text-[10px] font-bold text-slate-500 mb-1">الطفل:</label>
+                <input id="audit-f-child" oninput="applyAuditFilters()" type="text" placeholder="اسم الطفل..." class="w-full px-2.5 py-1.5 rounded-xl border border-church-300 text-xs bg-white" />
+              </div>
+
+              <!-- 2. Family filter -->
+              <div>
+                <label class="block text-[10px] font-bold text-slate-500 mb-1">الأسرة:</label>
+                <select id="audit-f-family" onchange="applyAuditFilters()" class="w-full px-2 py-1.5 rounded-xl border border-church-300 text-xs bg-white">
+                  <option value="">جميع الأسر</option>
+                  ${cacheFamilies.map(f => `<option value="${f.id}">${f.name}</option>`).join('')}
+                </select>
+              </div>
+
+              <!-- 3. Stage filter -->
+              <div>
+                <label class="block text-[10px] font-bold text-slate-500 mb-1">المرحلة:</label>
+                <select id="audit-f-stage" onchange="applyAuditFilters()" class="w-full px-2 py-1.5 rounded-xl border border-church-300 text-xs bg-white">
+                  <option value="">جميع المراحل</option>
+                  ${cacheStages.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                </select>
+              </div>
+
+              <!-- 4. Servant filter -->
+              <div>
+                <label class="block text-[10px] font-bold text-slate-500 mb-1">الخادم:</label>
+                <select id="audit-f-servant" onchange="applyAuditFilters()" class="w-full px-2 py-1.5 rounded-xl border border-church-300 text-xs bg-white">
+                  <option value="">جميع الخدام</option>
+                  ${servantsList.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('')}
+                </select>
+              </div>
+
+              <!-- 5. Type filter (add / deduct) -->
+              <div>
+                <label class="block text-[10px] font-bold text-slate-500 mb-1">نوع العملية:</label>
+                <select id="audit-f-type" onchange="applyAuditFilters()" class="w-full px-2 py-1.5 rounded-xl border border-church-300 text-xs bg-white font-bold">
+                  <option value="">الكل (إضافة وخصم)</option>
+                  <option value="add">➕ إضافة فقط</option>
+                  <option value="deduct">➖ خصم فقط</option>
+                </select>
+              </div>
+
+              <!-- 6. Date filter -->
+              <div>
+                <label class="block text-[10px] font-bold text-slate-500 mb-1">الفترة الزمنية:</label>
+                <select id="audit-f-period" onchange="handlePeriodChange(this.value)" class="w-full px-2 py-1.5 rounded-xl border border-church-300 text-xs bg-white font-bold">
+                  <option value="all">كل الأوقات</option>
+                  <option value="today" selected>عمليات اليوم</option>
+                  <option value="custom">تاريخ محدد...</option>
+                </select>
+                <input id="audit-f-custom-date" onchange="applyAuditFilters()" type="date" class="w-full mt-1 px-2 py-1 rounded-lg border border-church-300 text-xs bg-white hidden" />
+              </div>
+            </div>
+          </div>
+
+          <!-- AUDIT TABLE -->
+          <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+            <table class="w-full text-right text-xs">
+              <thead class="bg-church-50 text-slate-600 font-bold border-b border-church-200 sticky top-0 z-10">
+                <tr>
+                  <th class="p-3">التاريخ</th>
+                  <th class="p-3">الوقت</th>
+                  <th class="p-3">الطفل</th>
+                  <th class="p-3">الأسرة</th>
+                  <th class="p-3">المرحلة</th>
+                  <th class="p-3">البند / السبب</th>
+                  <th class="p-3">النقاط</th>
+                  <th class="p-3">الخادم المسؤول</th>
+                  <th class="p-3">الحالة</th>
+                  <th class="p-3 text-left">إجراء</th>
+                </tr>
+              </thead>
+              <tbody id="audit-tbody" class="divide-y divide-church-100">
+                ${renderAuditRows(logs)}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderAuditRows(logs) {
+      if (!logs || logs.length === 0) {
+        return `<tr><td colspan="10" class="text-center p-8 text-slate-400 font-bold">لا توجد عمليات مطابقة للفلاتر الحالية</td></tr>`;
+      }
+
+      return logs.map(l => {
+        const d = new Date(l.created_at);
+        const dateStr = d.toLocaleDateString('ar-EG');
+        const timeStr = d.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+        const isPos = l.points > 0;
+
+        return `
+          <tr class="hover:bg-church-50/40 ${l.is_reverted ? 'opacity-40 line-through bg-rose-50/30' : ''}">
+            <td class="p-3 font-mono text-slate-500 text-[11px]">${dateStr}</td>
+            <td class="p-3 font-mono text-slate-400 text-[11px]">${timeStr}</td>
+            <td class="p-3 font-black text-slate-900">
+              ${l.child_id ? (l.child?.full_name || 'طفل') : `<span class="px-2 py-0.5 rounded-lg bg-amber-100 text-amber-900 font-black text-[10px] border border-amber-300 inline-flex items-center gap-1">⭐ نقاط للأسرة</span>`}
+            </td>
+            <td class="p-3 text-church-700 font-bold">${l.family?.name || ''}</td>
+            <td class="p-3 text-slate-500">${l.stage?.name || ''}</td>
+            <td class="p-3 text-slate-700 font-medium">${l.reason}</td>
+            <td class="p-3 font-black text-sm ${isPos ? 'text-emerald-600' : 'text-rose-600'}">
+              ${isPos ? '+' + l.points : l.points}
+            </td>
+            <td class="p-3 text-slate-700 font-bold">${l.servant?.full_name || 'خادم'}</td>
+            <td class="p-3">
+              ${l.is_reverted ? '<span class="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[9px] font-bold">ملغية</span>' : '<span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[9px] font-bold">نشطة</span>'}
+            </td>
+            <td class="p-3 text-left">
+              ${!l.is_reverted ? `
+                <button onclick="revertPointLog('${l.id}')" class="px-2.5 py-1 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold text-[10px] shadow-2xs">
+                  تراجع
+                </button>
+              ` : '<span class="text-[10px] text-slate-400 font-bold">تم الإلغاء</span>'}
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function handlePeriodChange(val) {
+      const customInput = document.getElementById('audit-f-custom-date');
+      if (customInput) {
+        customInput.classList.toggle('hidden', val !== 'custom');
+      }
+      applyAuditFilters();
+    }
+
+    function applyAuditFilters() {
+      const childQ = (document.getElementById('audit-f-child')?.value || '').trim().toLowerCase();
+      const famId = document.getElementById('audit-f-family')?.value || '';
+      const stgId = document.getElementById('audit-f-stage')?.value || '';
+      const srvId = document.getElementById('audit-f-servant')?.value || '';
+      const typeVal = document.getElementById('audit-f-type')?.value || '';
+      const periodVal = document.getElementById('audit-f-period')?.value || 'all';
+      const customDate = document.getElementById('audit-f-custom-date')?.value || '';
+
+      const now = new Date();
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+      filteredAuditLogs = cacheLogs.filter(l => {
+        if (childQ && !(l.child?.full_name || '').toLowerCase().includes(childQ)) return false;
+        if (famId && l.family_id !== famId) return false;
+        if (stgId && l.stage_id !== stgId) return false;
+        if (srvId && l.servant_id !== srvId) return false;
+        if (typeVal === 'add' && l.points <= 0) return false;
+        if (typeVal === 'deduct' && l.points >= 0) return false;
+
+        const time = new Date(l.created_at).getTime();
+        if (periodVal === 'today' && time < startOfToday) return false;
+        if (periodVal === 'custom' && customDate) {
+          const logDate = new Date(l.created_at).toISOString().split('T')[0];
+          if (logDate !== customDate) return false;
+        }
+
+        return true;
+      });
+
+      const tbody = document.getElementById('audit-tbody');
+      const countSpan = document.getElementById('audit-count');
+      if (tbody) tbody.innerHTML = renderAuditRows(filteredAuditLogs);
+      if (countSpan) countSpan.textContent = filteredAuditLogs.length;
+    }
+
+    function resetAuditFilters() {
+      filteredAuditLogs = null;
+      const c = document.getElementById('audit-f-child'); if (c) c.value = '';
+      const f = document.getElementById('audit-f-family'); if (f) f.value = '';
+      const s = document.getElementById('audit-f-stage'); if (s) s.value = '';
+      const srv = document.getElementById('audit-f-servant'); if (srv) srv.value = '';
+      const t = document.getElementById('audit-f-type'); if (t) t.value = '';
+      const p = document.getElementById('audit-f-period'); if (p) p.value = 'all';
+      const cd = document.getElementById('audit-f-custom-date'); if (cd) { cd.value = ''; cd.classList.add('hidden'); }
+      applyAuditFilters();
+    }
+
+    // Initialize as soon as DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initApp);
+    } else {
+      initApp();
+    }
+
+    // Register PWA Service Worker for mobile app installability
+    if ('serviceWorker' in navigator && (window.location.protocol.startsWith('http') || window.location.protocol === 'file:')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch((err) => {
+          console.log('[PWA SW note]:', err);
+        });
+      });
+    }
+  </script>
+</body>
+</html>
