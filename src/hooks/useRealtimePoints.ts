@@ -51,6 +51,8 @@ export function useRealtimePoints(): RealtimePointsState {
       const childPointsTotalMap = new Map<string, number>();
       const childLastPointAtMap = new Map<string, string>();
       const familyPointsTodayMap = new Map<string, number>();
+      const familyChildrenPointsTodayMap = new Map<string, number>();
+      const familyDirectPointsTodayMap = new Map<string, number>();
 
       let runningTotalToday = 0;
 
@@ -78,6 +80,16 @@ export function useRealtimePoints(): RealtimePointsState {
             if (!currentLast || new Date(log.created_at).getTime() > new Date(currentLast).getTime()) {
               childLastPointAtMap.set(log.child_id, log.created_at);
             }
+
+            // Track children points part of the family
+            const prevKidsFam = familyChildrenPointsTodayMap.get(log.family_id) || 0;
+            familyChildrenPointsTodayMap.set(log.family_id, prevKidsFam + pts);
+          }
+        } else {
+          // Direct family point log (no child_id)
+          if (logTime >= startOfToday) {
+            const prevDirectFam = familyDirectPointsTodayMap.get(log.family_id) || 0;
+            familyDirectPointsTodayMap.set(log.family_id, prevDirectFam + pts);
           }
         }
 
@@ -124,9 +136,15 @@ export function useRealtimePoints(): RealtimePointsState {
         .filter((f) => f.is_active)
         .map((f) => {
           const count = rawChildren.filter((c) => c.family_id === f.id && c.is_active).length;
+          const kidsPts = familyChildrenPointsTodayMap.get(f.id) || 0;
+          const directPts = familyDirectPointsTodayMap.get(f.id) || 0;
+          const totalPts = familyPointsTodayMap.get(f.id) || 0;
+
           return {
             family: f,
-            pointsToday: familyPointsTodayMap.get(f.id) || 0,
+            pointsToday: totalPts,
+            childrenPointsToday: kidsPts,
+            directPointsToday: directPts,
             childrenCount: count,
           };
         });

@@ -12,7 +12,9 @@ import {
   Clock,
   Layers,
   CheckCircle2,
+  PlusCircle,
 } from 'lucide-react';
+import { FamilyPointsModal } from '../../components/common/FamilyPointsModal';
 
 interface StatsCounters {
   totalChildren: number;
@@ -22,7 +24,9 @@ interface StatsCounters {
 }
 
 export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> = ({ onNavigateTab }) => {
-  const { top3ChildrenToday, top3FamiliesToday, recentLogs, totalPointsToday, loading } = useRealtimePoints();
+  const { top3ChildrenToday, top3FamiliesToday, allFamiliesToday, recentLogs, totalPointsToday, loading, refreshData } = useRealtimePoints();
+  const [familyPointsModalOpen, setFamilyPointsModalOpen] = useState<boolean>(false);
+  const [targetFamilyForPoints, setTargetFamilyForPoints] = useState<string | null>(null);
   const [stats, setStats] = useState<StatsCounters>({
     totalChildren: 0,
     totalFamilies: 0,
@@ -67,11 +71,21 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
 
         <div className="flex flex-wrap items-center gap-3">
           <button
+            onClick={() => {
+              setTargetFamilyForPoints(null);
+              setFamilyPointsModalOpen(true);
+            }}
+            className="px-4 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-yellow-950 font-black text-xs shadow-lg transition-all active:scale-95 flex items-center gap-1.5"
+          >
+            <PlusCircle size={16} />
+            <span>إضافة نقاط للأسرة</span>
+          </button>
+          <button
             onClick={() => onNavigateTab('display')}
-            className="px-5 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-yellow-950 font-black text-xs shadow-lg transition-all active:scale-95 flex items-center gap-2"
+            className="px-4 py-2.5 rounded-2xl bg-church-700 hover:bg-church-600 text-white font-bold text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5 border border-church-500/30"
           >
             <Award size={16} />
-            شاشة العرض (TV Mode)
+            <span>شاشة العرض (TV Mode)</span>
           </button>
           <button
             onClick={() => onNavigateTab('rules')}
@@ -208,6 +222,10 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
               <div className="space-y-3">
                 {top3FamiliesToday.map((entry, idx) => {
                   const medals = ['🥇', '🥈', '🥉'];
+                  const kidsPts = entry.childrenPointsToday || 0;
+                  const directPts = entry.directPointsToday || 0;
+                  const totalPts = entry.pointsToday;
+
                   return (
                     <div
                       key={entry.family.id}
@@ -216,17 +234,33 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
                       <div className="flex items-center gap-3">
                         <span className="text-2xl">{medals[idx]}</span>
                         <div>
-                          <div className="font-extrabold text-sm text-slate-900">
-                            {entry.family.name}
+                          <div className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                            <span>{entry.family.name}</span>
+                            <span className="text-[10px] bg-white border border-church-200 text-slate-600 px-2 py-0.5 rounded-full font-medium">
+                              {entry.family.stage?.name}
+                            </span>
                           </div>
-                          <div className="text-xs text-slate-500">
-                            {entry.family.stage?.name} • {entry.childrenCount} مخدوم
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            أولاد: <strong className="text-slate-800">{kidsPts}</strong> • 
+                            مباشرة: <strong className="text-amber-800">{directPts > 0 ? `+${directPts}` : directPts}</strong>
                           </div>
                         </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-lg font-black text-blue-600">{entry.pointsToday}</span>
-                        <span className="text-xs text-slate-500 mr-1">نقطة اليوم</span>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <span className="text-lg font-black text-emerald-700">{totalPts}</span>
+                          <span className="text-xs text-slate-500 mr-1">نقطة اليوم</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setTargetFamilyForPoints(entry.family.id);
+                            setFamilyPointsModalOpen(true);
+                          }}
+                          className="p-1.5 rounded-xl bg-amber-100 hover:bg-amber-200 text-amber-900 transition-colors"
+                          title="إضافة نقاط مباشرة لهذه الأسرة"
+                        >
+                          <PlusCircle size={16} />
+                        </button>
                       </div>
                     </div>
                   );
@@ -297,6 +331,16 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
           </div>
         </div>
       </div>
+
+      <FamilyPointsModal
+        isOpen={familyPointsModalOpen}
+        onClose={() => setFamilyPointsModalOpen(false)}
+        onSuccess={() => {
+          refreshData();
+        }}
+        families={allFamiliesToday.map((f) => f.family)}
+        preSelectedFamilyId={targetFamilyForPoints}
+      />
     </div>
   );
 };

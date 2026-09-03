@@ -12,11 +12,15 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  ExternalLink
+  ExternalLink,
+  PlusCircle,
 } from 'lucide-react';
+import { FamilyPointsModal } from '../../components/common/FamilyPointsModal';
 
 export const FamiliesManager: React.FC = () => {
   const [families, setFamilies] = useState<Family[]>([]);
+  const [familyPointsModalOpen, setFamilyPointsModalOpen] = useState<boolean>(false);
+  const [targetFamilyForPoints, setTargetFamilyForPoints] = useState<string | null>(null);
   const [stages, setStages] = useState<Stage[]>([]);
   const [servants, setServants] = useState<Profile[]>([]);
   const [familyServants, setFamilyServants] = useState<FamilyServant[]>([]);
@@ -198,13 +202,25 @@ export const FamiliesManager: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={openAddModal}
-          className="px-4 py-2.5 rounded-2xl bg-church-600 hover:bg-church-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-2 self-start active:scale-95"
-        >
-          <Plus size={16} />
-          إضافة أسرة جديدة
-        </button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => {
+              setTargetFamilyForPoints(null);
+              setFamilyPointsModalOpen(true);
+            }}
+            className="px-4 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-yellow-950 font-black text-xs shadow-md transition-all flex items-center gap-1.5 active:scale-95"
+          >
+            <PlusCircle size={16} />
+            <span>إضافة نقاط للأسرة</span>
+          </button>
+          <button
+            onClick={openAddModal}
+            className="px-4 py-2.5 rounded-2xl bg-church-600 hover:bg-church-700 text-white font-bold text-xs shadow-md transition-all flex items-center gap-2 active:scale-95"
+          >
+            <Plus size={16} />
+            إضافة أسرة جديدة
+          </button>
+        </div>
       </div>
 
       {/* Families Grid */}
@@ -286,13 +302,26 @@ export const FamiliesManager: React.FC = () => {
 
                 {/* Card Actions */}
                 <div className="mt-5 pt-3 border-t border-church-100 flex items-center justify-between">
-                  <button
-                    onClick={() => setActiveFamilyDetail(fam)}
-                    className="text-xs font-bold text-church-700 hover:text-church-900 flex items-center gap-1"
-                  >
-                    <span>صفحة الأسرة</span>
-                    <ExternalLink size={14} />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => {
+                        setTargetFamilyForPoints(fam.id);
+                        setFamilyPointsModalOpen(true);
+                      }}
+                      className="text-xs font-bold text-amber-800 hover:text-amber-950 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-200 flex items-center gap-1 transition-colors"
+                      title="إضافة نقاط مباشرة لهذه الأسرة"
+                    >
+                      <PlusCircle size={13} />
+                      <span>نقاط للأسرة</span>
+                    </button>
+                    <button
+                      onClick={() => setActiveFamilyDetail(fam)}
+                      className="text-xs font-bold text-church-700 hover:text-church-900 flex items-center gap-1"
+                    >
+                      <span>صفحة الأسرة</span>
+                      <ExternalLink size={14} />
+                    </button>
+                  </div>
 
                   <div className="flex items-center gap-1">
                     <button
@@ -481,6 +510,16 @@ export const FamiliesManager: React.FC = () => {
           </div>
         </div>
       )}
+
+      <FamilyPointsModal
+        isOpen={familyPointsModalOpen}
+        onClose={() => setFamilyPointsModalOpen(false)}
+        onSuccess={() => {
+          fetchFamiliesData();
+        }}
+        families={families}
+        preSelectedFamilyId={targetFamilyForPoints}
+      />
     </div>
   );
 };

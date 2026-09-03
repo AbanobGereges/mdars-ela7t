@@ -108,6 +108,8 @@ export interface ChildLeaderboardEntry {
 export interface FamilyLeaderboardEntry {
   family: Family;
   pointsToday: number;
+  childrenPointsToday?: number;
+  directPointsToday?: number;
   childrenCount: number;
 }
 
