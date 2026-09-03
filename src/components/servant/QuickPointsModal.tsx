@@ -41,13 +41,14 @@ export const QuickPointsModal: React.FC<QuickPointsModalProps> = ({
 
     try {
       const reason = customReason.trim() ? `${rule.title} - ${customReason.trim()}` : rule.title;
+      const signedPoints = rule.type === 'deduct' ? -Math.abs(rule.points) : Math.abs(rule.points);
 
       const { error } = await supabase.from('point_logs').insert({
         child_id: child.id,
         family_id: child.family_id,
         stage_id: child.stage_id,
         rule_id: rule.id,
-        points: rule.points,
+        points: signedPoints,
         reason: reason,
         servant_id: user.id,
       });
