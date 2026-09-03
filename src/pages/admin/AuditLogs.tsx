@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { PointLog, Stage, Family, Profile } from '../../types/database';
+import { PointLog, Stage, Family, Profile, Child, PointRule } from '../../types/database';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   History,
