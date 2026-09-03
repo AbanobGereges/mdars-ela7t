@@ -1,12 +1,20 @@
 export type UserRole = 'admin' | 'servant' | 'display';
 
+export function isUserRole(value: unknown): value is UserRole {
+  return value === 'admin' || value === 'servant' || value === 'display';
+}
+
 export type PointRuleType = 'add' | 'deduct';
+
+export function isPointRuleType(value: unknown): value is PointRuleType {
+  return value === 'add' || value === 'deduct';
+}
 
 export interface Profile {
   id: string;
   email: string;
   full_name: string;
-  role: UserRole | string;
+  role: UserRole;
   is_approved: boolean;
   created_at: string;
   updated_at: string;
@@ -58,7 +66,7 @@ export interface PointRule {
   id: string;
   title: string;
   points: number;
-  type: PointRuleType | string;
+  type: PointRuleType;
   description?: string | null;
   is_active: boolean;
   target_stage_id?: string | null;

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { Profile, UserRole } from '../types/database';
+import { Profile, UserRole, isUserRole } from '../types/database';
 
 interface AuthContextType {
   user: User | null;
@@ -45,14 +45,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // 2. Set profile and fetch assigned families if servant or admin
       if (profData) {
-        setProfile(profData as Profile);
-        if (profData.role === 'admin') {
+        const validRole: UserRole = isUserRole(profData.role) ? profData.role : 'servant';
+        const profileObj: Profile = {
+          id: profData.id,
+          email: profData.email,
+          full_name: profData.full_name,
+          role: validRole,
+          is_approved: profData.is_approved,
+          created_at: profData.created_at,
+          updated_at: profData.updated_at,
+        };
+        setProfile(profileObj);
+
+        if (validRole === 'admin') {
           // Admin has access to all families
           const { data: fams } = await supabase.from('families').select('id');
           if (fams) {
             setAssignedFamilies(fams.map((f) => f.id));
           }
-        } else if (profData.role === 'servant') {
+        } else if (validRole === 'servant') {
           const { data: fsData } = await supabase
             .from('family_servants')
             .select('family_id')
@@ -157,7 +168,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAssignedFamilies([]);
   };
 
-  const role = profile?.role ?? null;
+  const role: UserRole | null = profile?.role && isUserRole(profile.role) ? profile.role : null;
   const isApproved = profile?.is_approved ?? false;
 
   return (

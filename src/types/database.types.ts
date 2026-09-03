@@ -231,7 +231,7 @@ export type Database = {
           target_family_id: string | null;
           target_stage_id: string | null;
           title: string;
-          type: 'add' | 'deduct' | string;
+          type: 'add' | 'deduct';
           updated_at: string;
         };
         Insert: {
@@ -243,7 +243,7 @@ export type Database = {
           target_family_id?: string | null;
           target_stage_id?: string | null;
           title: string;
-          type: 'add' | 'deduct' | string;
+          type: 'add' | 'deduct';
           updated_at?: string;
         };
         Update: {
@@ -255,7 +255,7 @@ export type Database = {
           target_family_id?: string | null;
           target_stage_id?: string | null;
           title?: string;
-          type?: 'add' | 'deduct' | string;
+          type?: 'add' | 'deduct';
           updated_at?: string;
         };
         Relationships: [];
@@ -267,7 +267,7 @@ export type Database = {
           full_name: string;
           id: string;
           is_approved: boolean;
-          role: 'admin' | 'servant' | 'display' | string;
+          role: 'admin' | 'servant' | 'display';
           updated_at: string;
         };
         Insert: {
@@ -276,7 +276,7 @@ export type Database = {
           full_name: string;
           id?: string;
           is_approved?: boolean;
-          role?: 'admin' | 'servant' | 'display' | string;
+          role?: 'admin' | 'servant' | 'display';
           updated_at?: string;
         };
         Update: {
@@ -285,7 +285,7 @@ export type Database = {
           full_name?: string;
           id?: string;
           is_approved?: boolean;
-          role?: 'admin' | 'servant' | 'display' | string;
+          role?: 'admin' | 'servant' | 'display';
           updated_at?: string;
         };
         Relationships: [];

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { PointRule, PointRuleType } from '../../types/database';
+import { PointRule, PointRuleType, isPointRuleType } from '../../types/database';
 import { Award, Plus, Edit2, Trash2, CheckCircle2, XCircle, AlertCircle, PlusCircle, MinusCircle } from 'lucide-react';
 
 export const PointRulesManager: React.FC = () => {
@@ -46,7 +46,7 @@ export const PointRulesManager: React.FC = () => {
     setEditingRule(rule);
     setTitle(rule.title);
     setPoints(Math.abs(rule.points));
-    setType(rule.type);
+    setType(isPointRuleType(rule.type) ? rule.type : (rule.points < 0 ? 'deduct' : 'add'));
     setDescription(rule.description || '');
     setErrorMessage(null);
     setModalOpen(true);
