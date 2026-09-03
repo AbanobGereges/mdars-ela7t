@@ -73,12 +73,28 @@ export const UsersManager: React.FC = () => {
     setActionError(null);
     try {
       const nextState = !profile.is_approved;
-      const { error } = await supabase
-        .from('profiles')
-        .update({ is_approved: nextState, updated_at: new Date().toISOString() })
-        .eq('id', profile.id);
+      if (nextState) {
+        // Call the approve_user RPC which confirms email in auth.users AND marks is_approved = true
+        const { error: rpcError } = await supabase.rpc('approve_user', {
+          target_user_id: profile.id,
+        });
 
-      if (error) throw error;
+        if (rpcError) {
+          console.warn('RPC approve_user fallback note:', rpcError);
+          const { error: updateError } = await supabase
+            .from('profiles')
+            .update({ is_approved: true, updated_at: new Date().toISOString() })
+            .eq('id', profile.id);
+          if (updateError) throw updateError;
+        }
+      } else {
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ is_approved: false, updated_at: new Date().toISOString() })
+          .eq('id', profile.id);
+        if (updateError) throw updateError;
+      }
+
       setProfiles((prev) =>
         prev.map((p) => (p.id === profile.id ? { ...p, is_approved: nextState } : p))
       );
