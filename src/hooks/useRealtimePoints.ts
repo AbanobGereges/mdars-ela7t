@@ -189,15 +189,12 @@ export function useRealtimePoints(): RealtimePointsState {
 
       if (childrenRes.error) {
         console.warn('children fetch error:', childrenRes.error);
-        throw childrenRes.error;
       }
       if (familiesRes.error) {
         console.warn('families fetch error:', familiesRes.error);
-        throw familiesRes.error;
       }
       if (logsRes.error) {
         console.warn('point_logs fetch error:', logsRes.error);
-        throw logsRes.error;
       }
 
       const stages = stagesRes.data || [];

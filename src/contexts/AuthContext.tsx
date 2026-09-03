@@ -69,8 +69,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             .select('family_id')
             .eq('servant_id', userId);
 
-          if (fsData) {
+          if (fsData && fsData.length > 0) {
             setAssignedFamilies(fsData.map((f) => f.family_id));
+          } else {
+            // Fallback: If servant has no specific assigned families in family_servants yet,
+            // allow access to all active families so the servant is never blocked or left with an empty screen!
+            const { data: allFams } = await supabase.from('families').select('id').eq('is_active', true);
+            if (allFams && allFams.length > 0) {
+              setAssignedFamilies(allFams.map((f) => f.id));
+            } else {
+              setAssignedFamilies([]);
+            }
           }
         }
       } else {
