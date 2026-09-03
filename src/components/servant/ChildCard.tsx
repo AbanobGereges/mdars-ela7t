@@ -16,12 +16,18 @@ export const ChildCard: React.FC<ChildCardProps> = ({ entry, onOpenPointsModal }
         {/* Header: Photo + Name + Tags */}
         <div className="flex items-center gap-4">
           <div className="relative">
-            <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-church-300 shadow-sm bg-church-50 flex items-center justify-center font-black text-xl text-church-800">
+            <div className="w-16 h-16 rounded-2xl overflow-hidden border-2 border-church-300 shadow-sm bg-church-50 flex items-center justify-center font-black text-xl text-church-800 relative">
               {child.image_url ? (
-                <img src={child.image_url} alt={child.full_name} className="w-full h-full object-cover" />
-              ) : (
-                child.full_name.charAt(0)
-              )}
+                <img
+                  src={child.image_url}
+                  alt={child.full_name || 'طفل'}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+              ) : null}
+              <span className="select-none">{(child.full_name || '؟').trim().charAt(0)}</span>
             </div>
             {entry.pointsToday > 0 && (
               <div className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-amber-400 text-yellow-950 flex items-center justify-center text-xs font-black shadow-md border border-white">
