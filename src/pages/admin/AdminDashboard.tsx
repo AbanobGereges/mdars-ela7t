@@ -183,23 +183,36 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
                   return (
                     <div
                       key={entry.child.id}
-                      className="p-3.5 rounded-2xl bg-church-50/60 border border-church-200/60 flex items-center justify-between"
+                      className="p-3.5 rounded-2xl bg-church-50/60 border border-church-200/60 flex flex-col gap-2"
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl">{medals[idx]}</span>
-                        <div>
-                          <div className="font-extrabold text-sm text-slate-900">
-                            {entry.child.full_name}
-                          </div>
-                          <div className="text-xs text-slate-500">
-                            {entry.child.family?.name} • {entry.child.stage?.name}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl">{medals[idx]}</span>
+                          <div>
+                            <div className="font-extrabold text-sm text-slate-900">
+                              {entry.child.full_name}
+                            </div>
+                            <div className="text-xs text-slate-500">
+                              {entry.child.family?.name} • {entry.child.stage?.name}
+                            </div>
                           </div>
                         </div>
+                        <div className="text-right">
+                          <span className="text-lg font-black text-amber-600">{entry.pointsToday}</span>
+                          <span className="text-xs text-slate-500 mr-1">نقطة اليوم</span>
+                        </div>
                       </div>
-                      <div className="text-right">
-                        <span className="text-lg font-black text-amber-600">{entry.pointsToday}</span>
-                        <span className="text-xs text-slate-500 mr-1">نقطة اليوم</span>
-                      </div>
+
+                      {entry.tiedChildren && entry.tiedChildren.length > 0 && (
+                        <div className="bg-amber-100/70 p-2 rounded-xl border border-amber-200 text-xs text-amber-900">
+                          <span className="font-black">🤝 متساوون بنفس النقاط ({entry.tiedChildren.length}): </span>
+                          {entry.tiedChildren.map((t) => (
+                            <span key={t.child.id} className="font-bold mr-1.5">
+                              {t.child.full_name} ({t.child.family?.name || ''})
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

@@ -128,8 +128,13 @@ export function useRealtimePoints(): RealtimePointsState {
         return (a.child.full_name || '').localeCompare(b.child.full_name || '', 'ar');
       });
 
-      // Global Top 3 Children Today
-      const top3Children = childEntries.slice(0, 3);
+      // Global Top 3 Children Today with tied children computation
+      const top3Children: ChildLeaderboardEntry[] = childEntries.slice(0, 3).map((hero) => ({
+        ...hero,
+        tiedChildren: childEntries.filter(
+          (c) => c.child.id !== hero.child.id && hero.pointsToday > 0 && c.pointsToday === hero.pointsToday
+        ),
+      }));
 
       // 2. Build FamilyLeaderboardEntry array
       const familyEntries: FamilyLeaderboardEntry[] = rawFamilies

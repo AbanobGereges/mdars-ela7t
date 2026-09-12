@@ -103,6 +103,7 @@ export interface ChildLeaderboardEntry {
   pointsToday: number;
   pointsTotal: number;
   lastPointAt: string | null;
+  tiedChildren?: ChildLeaderboardEntry[];
 }
 
 export interface FamilyLeaderboardEntry {

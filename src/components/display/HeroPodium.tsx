@@ -156,6 +156,28 @@ export const HeroPodium: React.FC<HeroPodiumProps> = ({ top3 }) => {
                     إجمالي النقاط العام: {entry.pointsTotal} نقطة
                   </div>
                 </div>
+
+                {/* Tied Children Section */}
+                {entry.tiedChildren && entry.tiedChildren.length > 0 && (
+                  <div className="mt-4 w-full bg-amber-500/10 border border-amber-400/30 rounded-2xl p-3 text-center">
+                    <div className="text-xs font-black text-amber-300 mb-2 flex items-center justify-center gap-1">
+                      <span>🤝 متساوون بنفس النقاط ({entry.tiedChildren.length}):</span>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-center gap-1.5">
+                      {entry.tiedChildren.map((t) => (
+                        <span
+                          key={t.child.id}
+                          className="bg-black/70 px-2.5 py-1 rounded-xl text-xs font-bold text-white border border-amber-400/30 shadow-xs inline-flex items-center gap-1"
+                        >
+                          <span>👤 {t.child.full_name}</span>
+                          <span className="text-amber-300 text-[10px]">
+                            ({t.child.family?.name || 'أسرة'})
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Pedestal block */}
