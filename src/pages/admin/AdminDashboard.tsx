@@ -13,6 +13,7 @@ import {
   Layers,
   CheckCircle2,
   PlusCircle,
+  Tv,
 } from 'lucide-react';
 import { FamilyPointsModal } from '../../components/common/FamilyPointsModal';
 
@@ -83,6 +84,13 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
           >
             <PlusCircle size={16} />
             <span>إضافة نقاط للأسرة</span>
+          </button>
+          <button
+            onClick={() => onNavigateTab('display_control')}
+            className="px-4 py-2.5 rounded-2xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs shadow-lg transition-all active:scale-95 flex items-center gap-1.5"
+          >
+            <Tv size={16} />
+            <span>التحكم بشاشة العرض</span>
           </button>
           <button
             onClick={() => onNavigateTab('display')}

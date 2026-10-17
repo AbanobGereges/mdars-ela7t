@@ -10,6 +10,7 @@ import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { UsersManager } from './pages/admin/UsersManager';
 import { StagesAndGroupsManager } from './pages/admin/StagesAndGroupsManager';
 import { FamiliesManager } from './pages/admin/FamiliesManager';
+import { DisplayControlManager } from './pages/admin/DisplayControlManager';
 import { ChildrenManager } from './pages/admin/ChildrenManager';
 import { PointRulesManager } from './pages/admin/PointRulesManager';
 import { AuditLogs } from './pages/admin/AuditLogs';
@@ -77,6 +78,7 @@ export const App: React.FC = () => {
           {currentTab === 'users' && <UsersManager />}
           {currentTab === 'stages' && <StagesAndGroupsManager />}
           {currentTab === 'families' && <FamiliesManager />}
+          {currentTab === 'display_control' && <DisplayControlManager />}
           {currentTab === 'children' && <ChildrenManager />}
           {currentTab === 'rules' && <PointRulesManager />}
           {currentTab === 'audit' && <AuditLogs />}

@@ -5,15 +5,13 @@ import { HeroPodium } from '../../components/display/HeroPodium';
 import { FamilyPodium } from '../../components/display/FamilyPodium';
 import { LiveTicker } from '../../components/display/LiveTicker';
 import { supabase } from '../../lib/supabase';
-import { Group, Stage } from '../../types/database';
-import { Sparkles, Trophy, Pin, Repeat } from 'lucide-react';
+import { Group, Stage, DisplaySettings } from '../../types/database';
+import confetti from 'canvas-confetti';
 
 export const DisplayView: React.FC = () => {
   const {
     children,
     allFamiliesToday,
-    top3ChildrenToday,
-    top3FamiliesToday,
     recentLogs,
     loading,
     error,
@@ -23,35 +21,135 @@ export const DisplayView: React.FC = () => {
   const [stages, setStages] = React.useState<Stage[]>([]);
   const [groups, setGroups] = React.useState<Group[]>([]);
   const [groupStages, setGroupStages] = React.useState<Array<{ group_id: string; stage_id: string }>>([]);
-  
-  // Persistent screen filter: 'all' | 'group:<groupId>' | 'stage:<stageId>'
+
+  // Active filter dictated solely by Admin: 'all' | 'group:<groupId>' | 'stage:<stageId>'
   const [selectedFilter, setSelectedFilter] = React.useState<string>(() => {
     return localStorage.getItem('CHURCH_DISPLAY_FILTER') || 'all';
   });
 
   const [isSlideshowActive, setIsSlideshowActive] = React.useState<boolean>(false);
+  const [slideshowInterval, setSlideshowInterval] = React.useState<number>(15);
   const [slideshowCountdown, setSlideshowCountdown] = React.useState<number>(15);
 
+  // Load initial stages, groups, and remote display settings from Supabase
   React.useEffect(() => {
-    // Load active stages and groups
     Promise.all([
       supabase.from('stages').select('*').eq('is_active', true).order('sort_order'),
       supabase.from('groups').select('*').eq('is_active', true).order('name'),
       supabase.from('group_stages').select('group_id, stage_id'),
-    ]).then(([stgRes, grpRes, gsRes]) => {
+      supabase.from('display_settings').select('*').eq('id', 'current_display_config').maybeSingle(),
+    ]).then(([stgRes, grpRes, gsRes, dispRes]) => {
       if (stgRes.data) setStages(stgRes.data as Stage[]);
       if (grpRes.data) setGroups(grpRes.data as Group[]);
       if (gsRes.data) setGroupStages(gsRes.data);
+
+      if (dispRes.data) {
+        const config = dispRes.data as DisplaySettings;
+        let filterKey = 'all';
+        if (config.mode === 'group' && config.target_id) {
+          filterKey = `group:${config.target_id}`;
+        } else if (config.mode === 'stage' && config.target_id) {
+          filterKey = `stage:${config.target_id}`;
+        }
+        setSelectedFilter(filterKey);
+        setIsSlideshowActive(config.slideshow_active || false);
+        setSlideshowInterval(config.slideshow_interval_seconds || 15);
+        setSlideshowCountdown(config.slideshow_interval_seconds || 15);
+        localStorage.setItem('CHURCH_DISPLAY_FILTER', filterKey);
+      }
     });
   }, []);
 
-  // Compute allowed stage IDs based on selected filter
-  const { allowedStageIds, currentGroup, currentStage, filterTitle, filterSubtitle } = React.useMemo(() => {
+  // Listen to remote commands from Admin via Realtime broadcast, Postgres changes, and BroadcastChannel
+  React.useEffect(() => {
+    const handleCommand = (payload: any) => {
+      if (!payload) return;
+
+      if (payload.action === 'confetti') {
+        confetti({
+          particleCount: 120,
+          spread: 80,
+          origin: { y: 0.6 },
+          colors: ['#f59e0b', '#fbbf24', '#10b981', '#3b82f6', '#ec4899'],
+        });
+        return;
+      }
+
+      if (payload.action === 'set_filter' || payload.filterKey) {
+        const fKey = payload.filterKey || 'all';
+        setSelectedFilter(fKey);
+        localStorage.setItem('CHURCH_DISPLAY_FILTER', fKey);
+        if (typeof payload.slideshow === 'boolean') {
+          setIsSlideshowActive(payload.slideshow);
+        }
+        if (typeof payload.intervalSec === 'number') {
+          setSlideshowInterval(payload.intervalSec);
+          setSlideshowCountdown(payload.intervalSec);
+        }
+      }
+    };
+
+    // 1. Supabase Realtime Channel
+    const channel = supabase
+      .channel('church-points-realtime-channel')
+      .on('broadcast', { event: 'display_command' }, (event) => {
+        handleCommand(event.payload);
+      })
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'display_settings' },
+        (payload) => {
+          if (payload.new) {
+            const config = payload.new as DisplaySettings;
+            let filterKey = 'all';
+            if (config.mode === 'group' && config.target_id) {
+              filterKey = `group:${config.target_id}`;
+            } else if (config.mode === 'stage' && config.target_id) {
+              filterKey = `stage:${config.target_id}`;
+            }
+            setSelectedFilter(filterKey);
+            setIsSlideshowActive(config.slideshow_active || false);
+            setSlideshowInterval(config.slideshow_interval_seconds || 15);
+            setSlideshowCountdown(config.slideshow_interval_seconds || 15);
+            localStorage.setItem('CHURCH_DISPLAY_FILTER', filterKey);
+          }
+        }
+      )
+      .subscribe();
+
+    // 2. Browser BroadcastChannel
+    let bc: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        bc = new BroadcastChannel('church_display_sync');
+        bc.onmessage = (e) => {
+          handleCommand(e.data);
+        };
+      }
+    } catch (e) {
+      console.warn('BroadcastChannel error:', e);
+    }
+
+    // 3. Storage event fallback
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'CHURCH_DISPLAY_FILTER' && e.newValue) {
+        setSelectedFilter(e.newValue);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+
+    return () => {
+      supabase.removeChannel(channel);
+      if (bc) bc.close();
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, []);
+
+  // Compute allowed stage IDs based on Admin's selected filter
+  const { allowedStageIds, filterTitle, filterSubtitle } = React.useMemo(() => {
     if (!selectedFilter || selectedFilter === 'all') {
       return {
         allowedStageIds: null as string[] | null,
-        currentGroup: null,
-        currentStage: null,
         filterTitle: 'الترتيب العام — كافة المراحل والأسر',
         filterSubtitle: 'عرض شامل لكافة المراحل والمجموعات في الخدمة',
       };
@@ -66,8 +164,6 @@ export const DisplayView: React.FC = () => {
 
       return {
         allowedStageIds: sIds,
-        currentGroup: grp,
-        currentStage: null,
         filterTitle: grp ? `🏆 أبطال ${grp.name}` : 'الترتيب العام',
         filterSubtitle: grp ? `✨ شاشة مستقلة لمجموعة: ${grp.name} (${stagesText}) — معزولة تماماً ✨` : '',
       };
@@ -78,8 +174,6 @@ export const DisplayView: React.FC = () => {
       const stg = stages.find((s) => s.id === sId);
       return {
         allowedStageIds: [sId],
-        currentGroup: null,
-        currentStage: stg,
         filterTitle: stg ? `🏆 أبطال مرحلة ${stg.name}` : 'الترتيب العام',
         filterSubtitle: stg ? `✨ شاشة مخصصة لمرحلة: ${stg.name} فقط ✨` : '',
       };
@@ -87,19 +181,17 @@ export const DisplayView: React.FC = () => {
 
     return {
       allowedStageIds: null,
-      currentGroup: null,
-      currentStage: null,
       filterTitle: 'الترتيب العام',
       filterSubtitle: '',
     };
   }, [selectedFilter, groups, stages, groupStages]);
 
-  // Slideshow effect
+  // Slideshow rotation if activated remotely by Admin
   React.useEffect(() => {
     if (!isSlideshowActive || groups.length === 0) return;
 
     const countdownInterval = setInterval(() => {
-      setSlideshowCountdown((prev) => (prev <= 1 ? 15 : prev - 1));
+      setSlideshowCountdown((prev) => (prev <= 1 ? slideshowInterval : prev - 1));
     }, 1000);
 
     const rotationInterval = setInterval(() => {
@@ -109,25 +201,14 @@ export const DisplayView: React.FC = () => {
         const nextIdx = (currentIdx + 1) % groups.length;
         return `group:${groups[nextIdx].id}`;
       });
-      setSlideshowCountdown(15);
-    }, 15000);
+      setSlideshowCountdown(slideshowInterval);
+    }, slideshowInterval * 1000);
 
     return () => {
       clearInterval(countdownInterval);
       clearInterval(rotationInterval);
     };
-  }, [isSlideshowActive, groups]);
-
-  const handleSelectFilter = (filterKey: string) => {
-    if (isSlideshowActive) setIsSlideshowActive(false);
-    setSelectedFilter(filterKey);
-    localStorage.setItem('CHURCH_DISPLAY_FILTER', filterKey);
-  };
-
-  const handleLockScreen = () => {
-    localStorage.setItem('CHURCH_DISPLAY_FILTER', selectedFilter);
-    alert('✓ تم تثبيت هذه المجموعة كافتراضي على هذا الجهاز/المتصفح بنجاح!');
-  };
+  }, [isSlideshowActive, groups, slideshowInterval]);
 
   // Compute strictly isolated Top 3 Children
   const displayedChildrenTop3 = React.useMemo(() => {
@@ -163,86 +244,31 @@ export const DisplayView: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-church-950 to-black text-white flex flex-col justify-between selection:bg-yellow-500/30">
-      {/* Header */}
+      {/* High-Contrast Presentation Header */}
       <Navbar isDisplayMode={true} />
 
-      {/* Control Bar: Full Group & Stage Controls */}
-      <div className="w-full bg-slate-900/90 border-b border-church-500/30 px-4 sm:px-6 py-2.5 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 z-20">
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          <span className="text-xs font-black text-amber-300 flex items-center gap-1 ml-1">
-            <span>🖥️</span>
-            <span>تخصيص الشاشة:</span>
+      {/* Remote Broadcast Header Bar (Controlled solely by Admin) */}
+      <div className="w-full bg-slate-900/90 border-b border-church-500/30 px-4 sm:px-6 py-2.5 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 text-xs z-20">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-1.5 bg-emerald-950/80 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-full text-xs font-black shadow-xs">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+            <span>بث مباشر تحت تحكم الإدارة</span>
+          </div>
+
+          <span className="font-black text-amber-300 bg-amber-400/10 px-3 py-1 rounded-full border border-amber-400/30">
+            {filterTitle}
           </span>
 
-          <button
-            onClick={() => handleSelectFilter('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all border ${
-              selectedFilter === 'all'
-                ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30 scale-105 border-amber-300 ring-2 ring-amber-300/40'
-                : 'bg-white/10 text-white/80 hover:bg-white/20 border-white/10'
-            }`}
-          >
-            🌟 عام (كافة المراحل)
-          </button>
-
-          {groups.map((grp) => {
-            const isSelected = selectedFilter === `group:${grp.id}`;
-            return (
-              <button
-                key={grp.id}
-                onClick={() => handleSelectFilter(`group:${grp.id}`)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 border ${
-                  isSelected
-                    ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30 scale-105 border-amber-300 ring-2 ring-amber-300/40'
-                    : 'bg-church-900/90 text-amber-100 hover:bg-church-800 border-church-500/40'
-                }`}
-              >
-                <span>📁</span>
-                <span>{grp.name}</span>
-              </button>
-            );
-          })}
-
-          {stages.map((stg) => {
-            const isSelected = selectedFilter === `stage:${stg.id}`;
-            return (
-              <button
-                key={stg.id}
-                onClick={() => handleSelectFilter(`stage:${stg.id}`)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 border ${
-                  isSelected
-                    ? 'bg-amber-400 text-slate-950 shadow-sm scale-105 border-amber-300 ring-2 ring-amber-300/40'
-                    : 'bg-black/50 text-slate-300 hover:bg-white/10 border-white/10'
-                }`}
-              >
-                <span>{stg.name.includes('إعدادي') ? '📖' : stg.name.includes('ثانوي') ? '🎓' : '🎒'}</span>
-                <span>{stg.name}</span>
-              </button>
-            );
-          })}
+          {isSlideshowActive && (
+            <span className="text-[11px] text-amber-200 font-bold bg-amber-950/60 px-2.5 py-0.5 rounded-md border border-amber-500/30 flex items-center gap-1">
+              <span>🔄 تبديل تلقائي للمجموعات</span>
+              <span className="font-mono text-amber-400 font-black">({slideshowCountdown}s)</span>
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsSlideshowActive(!isSlideshowActive)}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
-              isSlideshowActive
-                ? 'bg-emerald-500 text-slate-950 border-emerald-300 font-black ring-2 ring-emerald-300/50 animate-pulse'
-                : 'bg-white/10 text-white/90 hover:bg-white/20 border-white/15'
-            }`}
-          >
-            <Repeat className="w-3.5 h-3.5" />
-            <span>{isSlideshowActive ? `تبديل تلقائي يعمل (${slideshowCountdown}s)` : 'تشغيل التبديل التلقائي (Slideshow)'}</span>
-          </button>
-
-          <button
-            onClick={handleLockScreen}
-            title="تثبيت هذه المجموعة كافتراضي على هذا الجهاز/الشاشة"
-            className="px-3 py-1.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center gap-1"
-          >
-            <Pin className="w-3.5 h-3.5" />
-            <span>تثبيت للشاشة</span>
-          </button>
+        <div className="text-[11px] text-slate-400 font-semibold hidden sm:flex items-center gap-2">
+          <span>🔒 الشاشة مضبوطة تلقائياً من لوحة التحكم</span>
         </div>
       </div>
 
@@ -258,35 +284,34 @@ export const DisplayView: React.FC = () => {
             <p className="text-rose-200 text-lg font-bold">{error}</p>
             <button
               onClick={() => refreshData()}
-              className="mt-4 px-6 py-2.5 bg-rose-700 hover:bg-rose-600 text-white rounded-xl font-bold transition-all"
+              className="mt-4 px-6 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs"
             >
               إعادة المحاولة
             </button>
           </div>
         ) : (
           <>
-            {/* Header Title with Custom Group/Stage Banner */}
-            <div className="text-center">
-              <div className="inline-block bg-gradient-to-r from-yellow-500/20 via-amber-500/30 to-yellow-500/20 border border-yellow-400/50 text-yellow-300 px-6 py-2 rounded-full text-xs md:text-sm font-black shadow-xl mb-3 backdrop-blur-md">
-                {filterSubtitle}
+            {/* Top 3 Children Champions Podium */}
+            <section className="space-y-4">
+              <div className="text-center">
+                <h2 className="text-2xl sm:text-3xl font-black text-yellow-300 drop-shadow-md">
+                  👑 {filterTitle} — أبطال اليوم 👑
+                </h2>
+                {filterSubtitle && (
+                  <p className="text-xs sm:text-sm text-church-200 font-semibold mt-1">
+                    {filterSubtitle}
+                  </p>
+                )}
               </div>
-              <h2 className="text-3xl md:text-6xl font-black bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-400 bg-clip-text text-transparent mb-6 tracking-wide drop-shadow-md">
-                {filterTitle}
-              </h2>
-            </div>
-
-            {/* Section 1: 🏆 أبطال اليوم */}
-            <section className="animate-in fade-in zoom-in-95 duration-500">
-              <HeroPodium top3={displayedChildrenTop3} />
+              <HeroPodium top3Children={displayedChildrenTop3} />
             </section>
 
-            {/* Section 2: 🏠 أبطال الأسر */}
-            <section className="pt-4 border-t border-church-800/40 animate-in fade-in slide-in-from-bottom-6 duration-500">
-              <div className="text-center mb-6">
-                <h3 className="text-2xl md:text-3xl font-black text-white">
-                  🏠 أبطال الأسر {currentGroup ? `(${currentGroup.name})` : currentStage ? `(${currentStage.name})` : ''} 🏠
+            {/* Top 3 Families Podium */}
+            <section className="space-y-4 pt-2">
+              <div className="text-center">
+                <h3 className="text-xl sm:text-2xl font-black text-church-200 drop-shadow-md">
+                  🏰 ترتيب الأسر في اليوم 🏰
                 </h3>
-                <p className="text-xs text-church-200/70 mt-1">مجموع نقاط أطفال كل أسرة المسجلة خلال اليوم لهذه المجموعة فقط</p>
               </div>
               <FamilyPodium top3Families={displayedFamiliesTop3} />
             </section>
@@ -294,9 +319,9 @@ export const DisplayView: React.FC = () => {
         )}
       </main>
 
-      {/* Footer / Live Ticker */}
+      {/* Bottom Realtime Live News Ticker */}
       <footer className="w-full">
-        <LiveTicker logs={displayedLogs} />
+        <LiveTicker recentLogs={displayedLogs} />
       </footer>
     </div>
   );

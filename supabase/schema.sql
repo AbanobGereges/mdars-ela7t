@@ -676,3 +676,51 @@ VALUES
     ('الدوشة', -2, 'deduct', 'عدم الالتزام وإحداث فوضى أو مقاطعة الخادم', true),
     ('الغياب', -3, 'deduct', 'الغياب بدون إذن مسبق', true)
 ON CONFLICT DO NOTHING;
+
+-- ==============================================================================
+-- 17. DISPLAY SETTINGS TABLE (إعدادات البث المركزي لشاشات العرض)
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS public.display_settings (
+    id TEXT PRIMARY KEY DEFAULT 'current_display_config',
+    mode TEXT NOT NULL DEFAULT 'all', -- 'all', 'group', 'stage'
+    target_id UUID,
+    slideshow_active BOOLEAN NOT NULL DEFAULT false,
+    slideshow_interval_seconds INT NOT NULL DEFAULT 15,
+    custom_title TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL
+);
+
+ALTER TABLE public.display_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Anyone can view display settings" ON public.display_settings;
+CREATE POLICY "Anyone can view display settings"
+    ON public.display_settings FOR SELECT
+    USING (true);
+
+DROP POLICY IF EXISTS "Admins can insert display settings" ON public.display_settings;
+CREATE POLICY "Admins can insert display settings"
+    ON public.display_settings FOR INSERT
+    TO authenticated
+    WITH CHECK (
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    );
+
+DROP POLICY IF EXISTS "Admins can update display settings" ON public.display_settings;
+CREATE POLICY "Admins can update display settings"
+    ON public.display_settings FOR UPDATE
+    TO authenticated
+    USING (
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    )
+    WITH CHECK (
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    );
+
+INSERT INTO public.display_settings (id, mode, slideshow_active, slideshow_interval_seconds)
+VALUES ('current_display_config', 'all', false, 15)
+ON CONFLICT (id) DO NOTHING;
+
+ALTER TABLE public.display_settings REPLICA IDENTITY FULL;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.display_settings; EXCEPTION WHEN duplicate_object THEN null; END $$;
+

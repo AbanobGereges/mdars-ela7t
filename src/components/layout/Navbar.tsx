@@ -191,6 +191,18 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange, isDispl
                 الأسر
               </button>
               <button
+                onClick={() => onTabChange('display_control')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${
+                  currentTab === 'display_control'
+                    ? 'bg-amber-500 text-slate-950 shadow-md ring-2 ring-amber-300'
+                    : 'text-church-900 hover:bg-amber-100/60 bg-amber-50/50'
+                }`}
+              >
+                <Tv size={14} className="text-amber-600" />
+                <span>التحكم بالشاشة</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              </button>
+              <button
                 onClick={() => onTabChange('children')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                   currentTab === 'children'
@@ -307,6 +319,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange, isDispl
               { id: 'users', label: 'المستخدمين', icon: UserCheck },
               { id: 'stages', label: 'المراحل والمجموعات', icon: Layers },
               { id: 'families', label: 'الأسر', icon: Home },
+              { id: 'display_control', label: 'التحكم بالشاشة TV', icon: Tv },
               { id: 'children', label: 'الأولاد', icon: Users },
               { id: 'rules', label: 'قواعد النقاط', icon: Award },
               { id: 'audit', label: 'السجل', icon: History },

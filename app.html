@@ -417,7 +417,7 @@
     async function loadAllData() {
       if (!supabaseClient) return;
       try {
-        const [chRes, famRes, stgRes, ruleRes, logRes, profRes, fsRes, grpRes, gstgRes, gservRes] = await Promise.all([
+        const [chRes, famRes, stgRes, ruleRes, logRes, profRes, fsRes, grpRes, gstgRes, gservRes, dispRes] = await Promise.all([
           supabaseClient.from('children').select('*').order('full_name'),
           supabaseClient.from('families').select('*').order('name'),
           supabaseClient.from('stages').select('*').order('sort_order'),
@@ -427,8 +427,13 @@
           supabaseClient.from('family_servants').select('*'),
           supabaseClient.from('groups').select('*').order('created_at', { ascending: true }),
           supabaseClient.from('group_stages').select('*'),
-          supabaseClient.from('group_servants').select('*')
+          supabaseClient.from('group_servants').select('*'),
+          supabaseClient.from('display_settings').select('*').eq('id', 'current_display_config').maybeSingle()
         ]);
+
+        if (dispRes && dispRes.data) {
+          applyRemoteDisplaySettingsRow(dispRes.data);
+        }
 
         if (logRes.error) console.error('[loadAllData] point_logs query error:', logRes.error);
         if (chRes.error) console.error('[loadAllData] children query error:', chRes.error);
@@ -722,6 +727,18 @@
 
           refreshCurrentView();
           scheduleBackgroundReconcile();
+        })
+
+        // 8. DISPLAY SETTINGS & BROADCAST COMMANDS (تحكم الإدارة المباشر في شاشات العرض)
+        .on('broadcast', { event: 'display_command' }, (payload) => {
+          console.log('[Realtime broadcast display_command]:', payload);
+          handleRemoteDisplayCommand(payload.payload);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'display_settings' }, (payload) => {
+          console.log('[Realtime display_settings changed]:', payload);
+          if (payload.new) {
+            applyRemoteDisplaySettingsRow(payload.new);
+          }
         })
 
         // Status & Reconnect listener
@@ -1034,6 +1051,189 @@
       isDisplayOnlyMode = true;
       renderDisplayScreen();
     }
+
+    // ===========================================================================
+    // 3.5 CENTRALIZED DISPLAY REMOTE CONTROL BROADCAST FUNCTIONS
+    // ===========================================================================
+    var displaySlideshowIntervalSec = 15;
+
+    async function broadcastDisplayFilter(filterId, slideshowActive = false, intervalSec = displaySlideshowIntervalSec) {
+      if (slideshowActive) {
+        startDisplaySlideshow();
+      } else if (isDisplaySlideshowActive) {
+        stopDisplaySlideshow();
+      }
+
+      selectedDisplayFilter = filterId;
+      localStorage.setItem('CHURCH_DISPLAY_FILTER', filterId);
+
+      let mode = 'all';
+      let targetId = null;
+      let targetName = 'الترتيب العام (كافة المراحل)';
+
+      if (filterId.startsWith('group:')) {
+        mode = 'group';
+        targetId = filterId.split(':')[1];
+        const g = cacheGroups.find(grp => grp.id === targetId);
+        if (g) targetName = g.name;
+      } else if (filterId.startsWith('stage:')) {
+        mode = 'stage';
+        targetId = filterId.split(':')[1];
+        const s = cacheStages.find(stg => stg.id === targetId);
+        if (s) targetName = 'مرحلة ' + s.name;
+      }
+
+      // 1. Supabase Realtime Broadcast message
+      if (realtimeChannel) {
+        try {
+          realtimeChannel.send({
+            type: 'broadcast',
+            event: 'display_command',
+            payload: {
+              action: 'set_filter',
+              filterKey: filterId,
+              mode: mode,
+              targetId: targetId,
+              slideshow: slideshowActive,
+              intervalSec: intervalSec
+            }
+          });
+        } catch(e) {
+          console.warn('Realtime broadcast error:', e);
+        }
+      }
+
+      // 2. Cross-tab BroadcastChannel
+      try {
+        if ('BroadcastChannel' in window) {
+          const bc = new BroadcastChannel('church_display_sync');
+          bc.postMessage({
+            action: 'set_filter',
+            filterKey: filterId,
+            mode: mode,
+            targetId: targetId,
+            slideshow: slideshowActive,
+            intervalSec: intervalSec
+          });
+          bc.close();
+        }
+      } catch(e) {}
+
+      // 3. Supabase DB write
+      if (supabaseClient) {
+        try {
+          await supabaseClient.from('display_settings').upsert({
+            id: 'current_display_config',
+            mode: mode,
+            target_id: targetId,
+            slideshow_active: slideshowActive,
+            slideshow_interval_seconds: intervalSec,
+            updated_at: new Date().toISOString()
+          });
+        } catch(e) {
+          console.warn('display_settings upsert error:', e);
+        }
+      }
+
+      showToast(`✓ تم بث (${targetName}) بنجاح إلى جميع شاشات العرض!`, true);
+      renderAdminDashboard();
+    }
+
+    function broadcastConfettiTrigger() {
+      if (realtimeChannel) {
+        try {
+          realtimeChannel.send({
+            type: 'broadcast',
+            event: 'display_command',
+            payload: { action: 'confetti' }
+          });
+        } catch(e) {}
+      }
+      try {
+        if ('BroadcastChannel' in window) {
+          const bc = new BroadcastChannel('church_display_sync');
+          bc.postMessage({ action: 'confetti' });
+          bc.close();
+        }
+      } catch(e) {}
+      triggerConfetti();
+      showToast('🎉 تم إطلاق الاحتفال والكونفيتي على جميع شاشات العرض الآن!', true);
+    }
+
+    function broadcastStartSlideshow() {
+      broadcastDisplayFilter('all', true, displaySlideshowIntervalSec);
+    }
+
+    function broadcastStopSlideshow() {
+      broadcastDisplayFilter(selectedDisplayFilter, false, displaySlideshowIntervalSec);
+    }
+
+    function changeSlideshowInterval(sec) {
+      displaySlideshowIntervalSec = sec;
+      if (isDisplaySlideshowActive) {
+        broadcastDisplayFilter(selectedDisplayFilter, true, sec);
+      } else {
+        renderAdminDashboard();
+      }
+    }
+
+    function handleRemoteDisplayCommand(cmd) {
+      if (!cmd) return;
+      if (cmd.action === 'confetti') {
+        triggerConfetti();
+        return;
+      }
+      if (cmd.action === 'set_filter' || cmd.filterKey) {
+        selectedDisplayFilter = cmd.filterKey || 'all';
+        localStorage.setItem('CHURCH_DISPLAY_FILTER', selectedDisplayFilter);
+        if (cmd.slideshow) {
+          startDisplaySlideshow();
+        } else {
+          stopDisplaySlideshow();
+        }
+        if (isDisplayOnlyMode) {
+          renderDisplayScreen();
+        }
+      }
+    }
+
+    function applyRemoteDisplaySettingsRow(row) {
+      if (!row) return;
+      let fKey = 'all';
+      if (row.mode === 'group' && row.target_id) fKey = 'group:' + row.target_id;
+      else if (row.mode === 'stage' && row.target_id) fKey = 'stage:' + row.target_id;
+      selectedDisplayFilter = fKey;
+      localStorage.setItem('CHURCH_DISPLAY_FILTER', fKey);
+      if (row.slideshow_interval_seconds) {
+        displaySlideshowIntervalSec = row.slideshow_interval_seconds;
+      }
+      if (row.slideshow_active) {
+        startDisplaySlideshow();
+      } else {
+        stopDisplaySlideshow();
+      }
+      if (isDisplayOnlyMode) {
+        renderDisplayScreen();
+      }
+    }
+
+    // Cross-tab broadcast listener
+    try {
+      if ('BroadcastChannel' in window) {
+        const globalDisplayBc = new BroadcastChannel('church_display_sync');
+        globalDisplayBc.onmessage = (e) => {
+          handleRemoteDisplayCommand(e.data);
+        };
+      }
+    } catch(e) {}
+
+    // Storage event listener
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'CHURCH_DISPLAY_FILTER' && e.newValue) {
+        selectedDisplayFilter = e.newValue;
+        if (isDisplayOnlyMode) renderDisplayScreen();
+      }
+    });
 
     // ===========================================================================
     // 4. UI SCREENS - SETUP & AUTH
@@ -1410,57 +1610,25 @@
             </div>
           </header>
 
-          <!-- 2. Interactive Display Control Bar (التحكم الكامل في شاشة العرض وعزل المجموعات) -->
-          <div class="w-full bg-slate-900/90 border-b border-church-500/30 px-4 sm:px-6 py-2.5 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 z-20">
-            <!-- Filter Selector Pills -->
-            <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-              <span class="text-xs font-black text-amber-300 flex items-center gap-1 ml-1">
-                <span>🖥️</span>
-                <span>تخصيص الشاشة:</span>
+          <!-- 2. Remote Broadcast Status Banner (تحكم مركزي مباشر من الإدارة) -->
+          <div class="w-full bg-slate-900/90 border-b border-church-500/30 px-6 py-2.5 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 text-xs z-20">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 shadow-xs">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <span>بث مباشر تحت تحكم الإدارة</span>
               </span>
-
-              <!-- All Stages Option -->
-              <button onclick="setDisplayFilter('all')" class="px-3 py-1.5 rounded-xl text-xs font-black transition-all border ${selectedDisplayFilter==='all' ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30 scale-105 border-amber-300 ring-2 ring-amber-300/40' : 'bg-white/10 text-white/80 hover:bg-white/20 border-white/10'}">
-                🌟 عام (كافة المراحل)
-              </button>
-
-              <!-- Group Buttons -->
-              ${cacheGroups.filter(g => g.is_active).map(g => {
-                const isSelected = selectedDisplayFilter === 'group:' + g.id;
-                return `
-                  <button onclick="setDisplayFilter('group:${g.id}')" class="px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 border ${isSelected ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30 scale-105 border-amber-300 ring-2 ring-amber-300/40' : 'bg-church-900/90 text-amber-100 hover:bg-church-800 border-church-500/40'}">
-                    <span>📁</span>
-                    <span>${g.name}</span>
-                  </button>
-                `;
-              }).join('')}
-
-              <!-- Individual Stage Buttons -->
-              ${cacheStages.filter(s => s.is_active).map(s => {
-                let icon = '🎒';
-                if (s.name.includes('إعدادي')) icon = '📖';
-                if (s.name.includes('ثانوي')) icon = '🎓';
-                const isSelected = selectedDisplayFilter === 'stage:' + s.id;
-                return `
-                  <button onclick="setDisplayFilter('stage:${s.id}')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 border ${isSelected ? 'bg-amber-400 text-slate-950 shadow-sm scale-105 border-amber-300 ring-2 ring-amber-300/40' : 'bg-black/50 text-slate-300 hover:bg-white/10 border-white/10'}">
-                    <span>${icon}</span>
-                    <span>${s.name}</span>
-                  </button>
-                `;
-              }).join('')}
+              <span class="font-black text-amber-300 bg-amber-400/10 px-3.5 py-1 rounded-full border border-amber-400/30">
+                ${displayInfo.title}
+              </span>
+              ${isDisplaySlideshowActive ? `
+                <span class="text-[11px] text-amber-200 font-bold bg-amber-950/60 px-2.5 py-0.5 rounded-md border border-amber-500/30 flex items-center gap-1">
+                  <span>🔄 تبديل تلقائي للمجموعات</span>
+                  <span class="font-mono text-amber-400 font-black">(${displaySlideshowCountdown}s)</span>
+                </span>
+              ` : ''}
             </div>
-
-            <!-- Slideshow & Lock Buttons -->
-            <div class="flex items-center gap-2">
-              <button onclick="toggleDisplaySlideshow()" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${isDisplaySlideshowActive ? 'bg-emerald-500 text-slate-950 border-emerald-300 font-black ring-2 ring-emerald-300/50 animate-pulse' : 'bg-white/10 text-white/90 hover:bg-white/20 border-white/15'}">
-                <span>🔄</span>
-                <span>${isDisplaySlideshowActive ? 'تبديل تلقائي يعمل (' + displaySlideshowCountdown + 's)' : 'تشغيل التبديل التلقائي (Slideshow)'}</span>
-              </button>
-
-              <button onclick="lockDisplayScreenGroup()" title="تثبيت هذه المجموعة كافتراضي على هذا الجهاز/الشاشة" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center gap-1">
-                <span>📌</span>
-                <span>تثبيت للشاشة</span>
-              </button>
+            <div class="text-[11px] text-slate-400 font-semibold hidden sm:flex items-center gap-2">
+              <span>🔒 الشاشة مضبوطة تلقائياً ومباشرة من لوحة تحكم الإدارة</span>
             </div>
           </div>
 
@@ -2723,6 +2891,11 @@
             <button onclick="currentAdminTab='families'; renderAdminDashboard();" class="py-3 border-b-2 shrink-0 ${currentAdminTab==='families'?'border-church-600 text-church-900':'border-transparent text-slate-500'}">
               🏠 الأسر (${cacheFamilies.length})
             </button>
+            <button onclick="currentAdminTab='display_control'; renderAdminDashboard();" class="py-3 border-b-2 shrink-0 ${currentAdminTab==='display_control'?'border-church-600 text-church-900 font-black':'border-transparent text-slate-500'} flex items-center gap-1.5">
+              <span>🖥️</span>
+              <span>التحكم في شاشة العرض</span>
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            </button>
             <button onclick="currentAdminTab='children'; renderAdminDashboard();" class="py-3 border-b-2 shrink-0 ${currentAdminTab==='children'?'border-church-600 text-church-900':'border-transparent text-slate-500'}">
               🧒 الأطفال (${cacheChildren.length})
             </button>
@@ -2741,6 +2914,7 @@
               currentAdminTab === 'users' ? renderAdminUsers() :
               currentAdminTab === 'stages' ? renderAdminStages() :
               currentAdminTab === 'families' ? renderAdminFamilies(stats) :
+              currentAdminTab === 'display_control' ? renderAdminDisplayControl() :
               currentAdminTab === 'children' ? renderAdminChildren(stats) :
               currentAdminTab === 'rules' ? renderAdminRules() :
               renderAdminAudit()
@@ -3610,6 +3784,243 @@
       } catch (err) {
         alert(err.message || 'فشل حذف الأسرة');
       }
+    }
+
+    // 7.4.5 DISPLAY REMOTE CONTROL TAB (التحكم في شاشة العرض)
+    function renderAdminDisplayControl() {
+      const displayInfo = getDisplayAllowedStages();
+      const currentActiveName = isDisplaySlideshowActive
+        ? `🔄 تبديل تلقائي للمجموعات (${displaySlideshowCountdown}s)`
+        : (selectedDisplayFilter === 'all'
+            ? '🌟 الترتيب العام الشامل — كافة المراحل والأسر والأولاد'
+            : (selectedDisplayFilter.startsWith('group:')
+                ? `📁 ${cacheGroups.find(g => g.id === selectedDisplayFilter.split(':')[1])?.name || 'مجموعة معينة'} (معزولة تماماً)`
+                : (selectedDisplayFilter.startsWith('stage:')
+                    ? `🎒 مرحلة ${cacheStages.find(s => s.id === selectedDisplayFilter.split(':')[1])?.name || 'مرحلة معينة'}`
+                    : 'الترتيب العام')));
+
+      return `
+        <div class="space-y-6">
+          <!-- Main Header Banner -->
+          <div class="bg-gradient-to-r from-slate-950 via-church-900 to-slate-950 rounded-3xl p-6 sm:p-8 text-white shadow-2xl border border-church-500/30 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div>
+              <div class="inline-flex items-center gap-2 bg-amber-400/20 text-amber-300 border border-amber-400/40 px-3 py-1 rounded-full text-xs font-black mb-3">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>غرفة التحكم المركزي في البث المباشر للشاشات</span>
+              </div>
+              <h1 class="text-2xl sm:text-3xl font-black">التحكم في شاشة العرض TV</h1>
+              <p class="text-xs sm:text-sm text-church-200 mt-2 max-w-2xl leading-relaxed">
+                التحكم المباشر والمطلق فيما تعرضه شاشات العرض والتلفزيونات داخل الكنيسة. اختيارك هنا يُفرض فوراً على جميع الشاشات المتصلة دون إمكانية اختيار أو تغيير من شاشة العرض نفسها.
+              </p>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+              <button onclick="isDisplayOnlyMode=true; renderDisplayScreen();" class="px-5 py-3 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shadow-xl transition-all active:scale-95 flex items-center gap-2 border border-amber-300">
+                <span>🖥️</span>
+                <span>معاينة شاشة العرض الآن</span>
+              </button>
+              <button onclick="window.open(window.location.href.split('?')[0] + '?display=true', '_blank')" class="px-4 py-3 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition-all flex items-center gap-1.5">
+                <span>↗️</span>
+                <span>فتح شاشة العرض في نافذة جديدة</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Live Broadcast Status Card -->
+          <div class="bg-white rounded-3xl p-6 border-2 border-amber-400/40 shadow-lg relative overflow-hidden">
+            <div class="absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500"></div>
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div class="flex items-center gap-4">
+                <div class="w-14 h-14 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shadow-inner shrink-0 text-3xl">
+                  🖥️
+                </div>
+                <div>
+                  <span class="text-xs font-bold text-slate-500 block mb-1">
+                    البث المباشر المعروض الآن على الشاشات:
+                  </span>
+                  <div class="text-lg sm:text-xl font-black text-slate-900 flex items-center gap-2 flex-wrap">
+                    <span>${currentActiveName}</span>
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                      مباشر Realtime
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-3">
+                <button onclick="broadcastConfettiTrigger()" class="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black text-xs shadow-md transition-all active:scale-95 flex items-center gap-2">
+                  <span>🎉</span>
+                  <span>إطلاق احتفال وكونفيتي للشاشات</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 1: General Broadcast -->
+          <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="text-xl">🌟</span>
+                <h2 class="text-lg font-black text-slate-900">البث العام الشامل</h2>
+              </div>
+              <span class="text-xs text-slate-500 font-semibold">يشمل كافة المراحل والأسر والأولاد</span>
+            </div>
+            <div class="p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <h3 class="font-black text-slate-900 text-sm">الترتيب العام الشامل لمدارس الأحد</h3>
+                <p class="text-xs text-slate-600 mt-0.5">
+                  يعرض ترتيب أفضل 3 أولاد وأفضل 3 أسر على مستوى الكنيسة بالكامل دون أي تصفية.
+                </p>
+              </div>
+              <button onclick="broadcastDisplayFilter('all', false)" class="px-5 py-3 rounded-xl font-black text-xs transition-all flex items-center gap-2 shrink-0 ${selectedDisplayFilter==='all' && !isDisplaySlideshowActive ? 'bg-emerald-600 text-white ring-4 ring-emerald-300/40 shadow-lg' : 'bg-amber-500 hover:bg-amber-400 text-slate-950 shadow-md active:scale-95'}">
+                ${selectedDisplayFilter==='all' && !isDisplaySlideshowActive ? '<span>✓</span><span>معروض حالياً على الشاشة ✅</span>' : '<span>📡</span><span>بث الترتيب العام فوراً</span>'}
+              </button>
+            </div>
+          </div>
+
+          <!-- Section 2: Groups Broadcast -->
+          <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-5">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-xl">📁</span>
+                <h2 class="text-lg font-black text-slate-900">البث حسب المجموعات (عزل تام لكل مجموعة ومراحلها)</h2>
+              </div>
+              <span class="text-xs font-bold text-slate-500">${cacheGroups.length} مجموعات نشطة</span>
+            </div>
+            <p class="text-xs text-slate-500 leading-relaxed">
+              عند اختيار مجموعة، يتم عزل شاشة العرض بالكامل لتعرض فقط الأولاد والأسر والنقاط التابعة للمراحل المرتبطة بهذه المجموعة فقط، دون أي تداخل مع مجموعات أخرى.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              ${cacheGroups.map(group => {
+                const isCurrentlySelected = selectedDisplayFilter === 'group:' + group.id && !isDisplaySlideshowActive;
+                const linkedStageIds = cacheGroupStages.filter(gs => gs.group_id === group.id).map(gs => gs.stage_id);
+                const linkedStages = cacheStages.filter(s => linkedStageIds.includes(s.id));
+                const kidCount = cacheChildren.filter(c => linkedStageIds.includes(c.stage_id)).length;
+                const famCount = cacheFamilies.filter(f => linkedStageIds.includes(f.stage_id)).length;
+
+                return `
+                  <div class="rounded-2xl p-5 border-2 transition-all flex flex-col justify-between gap-4 ${isCurrentlySelected ? 'border-amber-400 bg-amber-50/60 shadow-xl ring-4 ring-amber-300/30' : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50 hover:border-slate-300 shadow-xs'}">
+                    <div>
+                      <div class="flex items-start justify-between gap-2 mb-2">
+                        <div class="flex items-center gap-2">
+                          <div class="w-9 h-9 rounded-xl bg-amber-100 text-amber-800 flex items-center justify-center font-bold text-lg">
+                            📁
+                          </div>
+                          <div>
+                            <h3 class="font-black text-base text-slate-900">${group.name}</h3>
+                            <span class="text-[11px] text-slate-500 font-bold">${kidCount} طفل • ${famCount} أسرة</span>
+                          </div>
+                        </div>
+                        ${isCurrentlySelected ? `
+                          <span class="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-600 text-white shadow-xs">
+                            شاشة نشطة
+                          </span>
+                        ` : ''}
+                      </div>
+
+                      ${group.description ? `<p class="text-xs text-slate-500 mb-3">${group.description}</p>` : ''}
+
+                      <div class="mt-3">
+                        <span class="text-[11px] font-bold text-slate-500 block mb-1.5">المراحل التابعة للمجموعة:</span>
+                        <div class="flex flex-wrap gap-1.5">
+                          ${linkedStages.length === 0 ? `
+                            <span class="text-[11px] text-rose-500 font-bold">لا توجد مراحل مرتبطة</span>
+                          ` : linkedStages.map(stg => `
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-bold bg-white text-slate-800 border border-slate-200 shadow-2xs">
+                              <span>🎒</span>
+                              <span>${stg.name}</span>
+                            </span>
+                          `).join('')}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="pt-3 border-t border-slate-200/80">
+                      <button onclick="broadcastDisplayFilter('group:${group.id}', false)" class="w-full py-2.5 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 shadow-sm ${isCurrentlySelected ? 'bg-emerald-600 text-white ring-2 ring-emerald-300' : 'bg-church-800 hover:bg-church-900 text-white active:scale-95'}">
+                        ${isCurrentlySelected ? `
+                          <span>✓</span>
+                          <span>معروضة حالياً على الشاشات</span>
+                        ` : `
+                          <span>📡</span>
+                          <span>بث هذه المجموعة للشاشة فوراً</span>
+                        `}
+                      </button>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+          <!-- Section 3: Stage Broadcast -->
+          <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="text-xl">🎒</span>
+                <h2 class="text-lg font-black text-slate-900">البث المباشر حسب مرحلة واحدة مستقلة</h2>
+              </div>
+              <span class="text-xs text-slate-500 font-semibold">${cacheStages.length} مراحل دراسية</span>
+            </div>
+            <p class="text-xs text-slate-500">
+              تخصيص شاشة العرض لصف معين فقط (مثل 1 ابتدائي أو 2 إعدادي):
+            </p>
+            <div class="flex flex-wrap gap-2.5">
+              ${cacheStages.map(stg => {
+                const isCurrentlySelected = selectedDisplayFilter === 'stage:' + stg.id && !isDisplaySlideshowActive;
+                return `
+                  <button onclick="broadcastDisplayFilter('stage:${stg.id}', false)" class="px-4 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 border ${isCurrentlySelected ? 'bg-amber-400 text-slate-950 border-amber-500 shadow-md ring-2 ring-amber-300' : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'}">
+                    <span>${stg.name.includes('إعدادي') ? '📖' : (stg.name.includes('ثانوي') ? '🎓' : '🎒')}</span>
+                    <span>مرحلة ${stg.name}</span>
+                    ${isCurrentlySelected ? '<span>✓</span>' : ''}
+                  </button>
+                `;
+              }).join('')}
+            </div>
+          </div>
+
+          <!-- Section 4: Automated Slideshow Controller -->
+          <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-5">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <div class="flex items-center gap-2">
+                <span class="text-xl">🔄</span>
+                <h2 class="text-lg font-black text-slate-900">التحكم في التبديل التلقائي (Slideshow Automator)</h2>
+              </div>
+              <span class="px-2.5 py-1 rounded-full text-xs font-black ${isDisplaySlideshowActive ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-slate-100 text-slate-600'}">
+                ${isDisplaySlideshowActive ? 'التبديل التلقائي نشط الآن 🟢' : 'التبديل التلقائي متوقف ⚪'}
+              </span>
+            </div>
+            <p class="text-xs text-slate-500 leading-relaxed">
+              يمكنك جعل شاشات العرض تبدّل تلقائياً بين المجموعات كل عدد محدد من الثواني، بحيث يرى كل قطاع مجموعته بالتناوب على الشاشة الكبيرة.
+            </p>
+            <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-5">
+              <div class="space-y-2">
+                <span class="text-xs font-bold text-slate-700 block">فترة التبديل بين كل مجموعة والأخرى:</span>
+                <div class="flex items-center gap-2 flex-wrap">
+                  ${[10, 15, 20, 30, 60].map(sec => `
+                    <button onclick="changeSlideshowInterval(${sec})" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${displaySlideshowIntervalSec === sec ? 'bg-amber-500 text-slate-950 font-black border-amber-400 shadow-xs' : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100'}">
+                      ${sec} ثانية
+                    </button>
+                  `).join('')}
+                </div>
+              </div>
+              <div class="flex items-center gap-3 shrink-0">
+                ${isDisplaySlideshowActive ? `
+                  <button onclick="broadcastStopSlideshow()" class="px-5 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs shadow-md transition-all active:scale-95 flex items-center gap-2">
+                    <span>⏹️</span>
+                    <span>إيقاف التبديل التلقائي</span>
+                  </button>
+                ` : `
+                  <button onclick="broadcastStartSlideshow()" class="px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md transition-all active:scale-95 flex items-center gap-2">
+                    <span>▶️</span>
+                    <span>تشغيل التبديل التلقائي لجميع الشاشات</span>
+                  </button>
+                `}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
     }
 
     // 7.5 CHILDREN MANAGER TAB

@@ -364,3 +364,52 @@ ALTER TABLE public.group_servants REPLICA IDENTITY FULL;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.groups; EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.group_stages; EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.group_servants; EXCEPTION WHEN duplicate_object THEN null; END $$;
+
+-- 11. جدول إعدادات البث المركزي لشاشات العرض (display_settings)
+-- يتيح للأدمن التحكم المركزي فيما تعرضه كل الشاشات لحظياً عن بعد
+CREATE TABLE IF NOT EXISTS public.display_settings (
+    id TEXT PRIMARY KEY DEFAULT 'current_display_config',
+    mode TEXT NOT NULL DEFAULT 'all', -- 'all', 'group', 'stage'
+    target_id UUID,
+    slideshow_active BOOLEAN NOT NULL DEFAULT false,
+    slideshow_interval_seconds INT NOT NULL DEFAULT 15,
+    custom_title TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL
+);
+
+ALTER TABLE public.display_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Anyone can view display settings" ON public.display_settings;
+CREATE POLICY "Anyone can view display settings"
+    ON public.display_settings FOR SELECT
+    USING (true);
+
+DROP POLICY IF EXISTS "Admins can insert display settings" ON public.display_settings;
+CREATE POLICY "Admins can insert display settings"
+    ON public.display_settings FOR INSERT
+    TO authenticated
+    WITH CHECK (
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    );
+
+DROP POLICY IF EXISTS "Admins can update display settings" ON public.display_settings;
+CREATE POLICY "Admins can update display settings"
+    ON public.display_settings FOR UPDATE
+    TO authenticated
+    USING (
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    )
+    WITH CHECK (
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    );
+
+-- صف البث الافتراضي الأولي
+INSERT INTO public.display_settings (id, mode, slideshow_active, slideshow_interval_seconds)
+VALUES ('current_display_config', 'all', false, 15)
+ON CONFLICT (id) DO NOTHING;
+
+-- تفعيل البث الحي Realtime لجدول إعدادات الشاشة
+ALTER TABLE public.display_settings REPLICA IDENTITY FULL;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.display_settings; EXCEPTION WHEN duplicate_object THEN null; END $$;
+

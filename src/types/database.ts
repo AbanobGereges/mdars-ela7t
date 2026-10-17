@@ -148,4 +148,15 @@ export interface FamilyLeaderboardEntry {
   childrenCount: number;
 }
 
+export interface DisplaySettings {
+  id: string;
+  mode: 'all' | 'group' | 'stage';
+  target_id?: string | null;
+  slideshow_active: boolean;
+  slideshow_interval_seconds: number;
+  custom_title?: string | null;
+  updated_at?: string;
+  updated_by?: string | null;
+}
+
 export * from './database.types';
