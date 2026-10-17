@@ -91,18 +91,32 @@ export const UsersManager: React.FC = () => {
     try {
       const nextState = !profile.is_approved;
       if (nextState) {
-        // Call the approve_user RPC which confirms email in auth.users AND marks is_approved = true
-        const { error: rpcError } = await supabase.rpc('approve_user', {
-          target_user_id: profile.id,
-        });
+        if (profile.role === 'student') {
+          const { error: stuRpcErr } = await supabase.rpc('approve_student_account', {
+            target_user_id: profile.id,
+          });
+          if (stuRpcErr) {
+            console.warn('RPC approve_student_account note:', stuRpcErr);
+            const { error: updateError } = await supabase
+              .from('profiles')
+              .update({ is_approved: true, updated_at: new Date().toISOString() })
+              .eq('id', profile.id);
+            if (updateError) throw updateError;
+          }
+        } else {
+          // Call the approve_user RPC which confirms email in auth.users AND marks is_approved = true
+          const { error: rpcError } = await supabase.rpc('approve_user', {
+            target_user_id: profile.id,
+          });
 
-        if (rpcError) {
-          console.warn('RPC approve_user fallback note:', rpcError);
-          const { error: updateError } = await supabase
-            .from('profiles')
-            .update({ is_approved: true, updated_at: new Date().toISOString() })
-            .eq('id', profile.id);
-          if (updateError) throw updateError;
+          if (rpcError) {
+            console.warn('RPC approve_user fallback note:', rpcError);
+            const { error: updateError } = await supabase
+              .from('profiles')
+              .update({ is_approved: true, updated_at: new Date().toISOString() })
+              .eq('id', profile.id);
+            if (updateError) throw updateError;
+          }
         }
       } else {
         const { error: updateError } = await supabase
@@ -251,6 +265,7 @@ export const UsersManager: React.FC = () => {
             { id: 'all', label: 'كل المستخدمين' },
             { id: 'admin', label: '👑 الأدمن' },
             { id: 'servant', label: '🙋 الخدام' },
+            { id: 'student', label: '🌸 المخدومين (إعدادي)' },
             { id: 'display', label: '🖥️ شاشات العرض' },
           ].map((tab) => (
             <button
@@ -343,6 +358,7 @@ export const UsersManager: React.FC = () => {
                         >
                           <option value="admin">👑 Admin (مدير النظام)</option>
                           <option value="servant">🙋 Servant (خادم)</option>
+                          <option value="student">🌸 Student (مخدوم / إعدادي)</option>
                           <option value="display">🖥️ Display (شاشة عرض)</option>
                         </select>
                       </td>

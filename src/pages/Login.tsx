@@ -5,11 +5,14 @@ import { Sparkles, LogIn, UserPlus, AlertCircle, CheckCircle, Tv } from 'lucide-
 export const Login: React.FC<{ onOpenDisplayDirectly: () => void }> = ({ onOpenDisplayDirectly }) => {
   const { signIn, signUp, isConfigured } = useAuth();
   const [isRegister, setIsRegister] = useState<boolean>(false);
+  const [accountType, setAccountType] = useState<'student' | 'servant'>('student');
   const [email, setEmail] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [fullName, setFullName] = useState<string>('');
+  const [stageId, setStageId] = useState<string>('');
   const [familyId, setFamilyId] = useState<string>('');
-  const [availableFamilies, setAvailableFamilies] = useState<Array<{ id: string; name: string; stage?: { name: string } }>>([]);
+  const [availableStages, setAvailableStages] = useState<Array<{ id: string; name: string }>>([]);
+  const [availableFamilies, setAvailableFamilies] = useState<Array<{ id: string; name: string; stage_id?: string; stage?: { name: string } }>>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -17,18 +20,18 @@ export const Login: React.FC<{ onOpenDisplayDirectly: () => void }> = ({ onOpenD
   React.useEffect(() => {
     if (isConfigured) {
       import('../lib/supabase').then(({ supabase }) => {
-        supabase
-          .from('families')
-          .select('id, name, stage:stages(name)')
-          .eq('is_active', true)
-          .order('name')
-          .then(({ data }) => {
-            if (data) {
-              setAvailableFamilies(
-                data as unknown as Array<{ id: string; name: string; stage?: { name: string } }>
-              );
-            }
-          });
+        Promise.all([
+          supabase.from('stages').select('id, name').eq('is_active', true).order('sort_order'),
+          supabase.from('families').select('id, name, stage_id, stage:stages(name)').eq('is_active', true).order('name'),
+        ]).then(([stgsRes, famsRes]) => {
+          if (stgsRes.data) {
+            setAvailableStages(stgsRes.data as Array<{ id: string; name: string }>);
+            if (stgsRes.data.length > 0) setStageId(stgsRes.data[0].id);
+          }
+          if (famsRes.data) {
+            setAvailableFamilies(famsRes.data as unknown as Array<{ id: string; name: string; stage_id?: string; stage?: { name: string } }>);
+          }
+        });
       });
     }
   }, [isConfigured]);
@@ -47,11 +50,20 @@ export const Login: React.FC<{ onOpenDisplayDirectly: () => void }> = ({ onOpenD
           return;
         }
 
-        const { error } = await signUp(email.trim(), password, fullName.trim(), familyId || undefined);
+        const { error } = await signUp(
+          email.trim(),
+          password,
+          fullName.trim(),
+          familyId || undefined,
+          accountType,
+          stageId || undefined
+        );
         if (error) throw error;
 
         setSuccessMsg(
-          'تم إنشاء الحساب بنجاح وتحديد الأسرة! إذا كان هذا أول حساب مسجل بالنظام فسيكون أدمن تلقائياً، وإلا سينتظر اعتماد مسؤول الخدمة.'
+          accountType === 'student'
+            ? '🌸 تم إنشاء حساب المخدومة بنجاح! في انتظار اعتماد خادم مرحلة إعدادي أو مسؤول الخدمة لتفعيل الدخول.'
+            : 'تم إنشاء حساب الخادم بنجاح! في انتظار اعتماد مسؤول الخدمة.'
         );
       } else {
         const { error } = await signIn(email.trim(), password);
@@ -146,34 +158,92 @@ export const Login: React.FC<{ onOpenDisplayDirectly: () => void }> = ({ onOpenD
 
           {isRegister && (
             <>
+              {/* Account Type Selector */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">الاسم بالكامل:</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">نوع الحساب:</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAccountType('student')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-black transition-all flex items-center justify-center gap-1.5 ${
+                      accountType === 'student'
+                        ? 'bg-pink-100 border-pink-400 text-pink-900 shadow-2xs ring-2 ring-pink-300/40'
+                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>🌸</span>
+                    <span>مخدومة (إعدادي)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAccountType('servant')}
+                    className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                      accountType === 'servant'
+                        ? 'bg-church-100 border-church-400 text-church-900 shadow-2xs ring-2 ring-church-300/40'
+                        : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span>🙋</span>
+                    <span>خادم / خادمة</span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {accountType === 'student' ? 'اسم المخدومة بالكامل:' : 'الاسم بالكامل:'}
+                </label>
                 <input
                   type="text"
                   required
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="مثال: الخادم مينا نبيل"
+                  placeholder={accountType === 'student' ? 'مثال: مريم أشرف سمير' : 'مثال: الخادم مينا نبيل'}
                   className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:outline-none focus:ring-2 focus:ring-church-500 bg-church-50/30"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">الأسرة التي تخدم بها:</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">المرحلة الدراسية:</label>
+                <select
+                  value={stageId}
+                  onChange={(e) => {
+                    setStageId(e.target.value);
+                    setFamilyId('');
+                  }}
+                  className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:outline-none focus:ring-2 focus:ring-church-500 bg-white"
+                >
+                  <option value="">اختر المرحلة الدراسية...</option>
+                  {availableStages.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {accountType === 'student' ? 'الأسرة التابعة لها:' : 'الأسرة التي تخدم بها:'}
+                </label>
                 <select
                   value={familyId}
                   onChange={(e) => setFamilyId(e.target.value)}
                   className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:outline-none focus:ring-2 focus:ring-church-500 bg-white"
                 >
-                  <option value="">اختر أسرتك...</option>
-                  {availableFamilies.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name} ({f.stage?.name || 'عام'})
-                    </option>
-                  ))}
+                  <option value="">اختر الأسرة...</option>
+                  {availableFamilies
+                    .filter((f) => !stageId || !f.stage_id || f.stage_id === stageId)
+                    .map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name} ({f.stage?.name || 'عام'})
+                      </option>
+                    ))}
                 </select>
                 <span className="text-[10px] text-slate-400 mt-1 block">
-                  اختر أسرتك لربط حسابك بها فور اعتمادك من مسؤول الخدمة
+                  {accountType === 'student'
+                    ? 'سيتمكن خادم مرحلتك أو مسؤول الخدمة من اعتماد حسابك فور التسجيل'
+                    : 'اختر أسرتك لربط حسابك بها فور اعتمادك من مسؤول الخدمة'}
                 </span>
               </div>
             </>

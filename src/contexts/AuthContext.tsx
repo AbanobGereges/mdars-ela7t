@@ -15,7 +15,15 @@ interface AuthContextType {
   loading: boolean;
   isConfigured: boolean;
   signIn: (email: string, pass: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, pass: string, fullName: string, requestedFamilyId?: string) => Promise<{ error: Error | null }>;
+  signUp: (
+    email: string,
+    pass: string,
+    fullName: string,
+    requestedFamilyId?: string,
+    requestedRole?: UserRole,
+    requestedStageId?: string,
+    requestedChildId?: string
+  ) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -56,6 +64,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           full_name: profData.full_name,
           role: validRole,
           is_approved: profData.is_approved,
+          child_id: profData.child_id || null,
+          stage_id: profData.stage_id || null,
+          family_id: profData.family_id || null,
           created_at: profData.created_at,
           updated_at: profData.updated_at,
         };
@@ -71,6 +82,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (famsRes.data) setAssignedFamilies(famsRes.data.map((f) => f.id));
           if (stgsRes.data) setAssignedStages(stgsRes.data.map((s) => s.id));
           if (grpsRes.data) setAssignedGroups(grpsRes.data.map((g) => g.id));
+        } else if (validRole === 'student') {
+          if (profileObj.family_id) setAssignedFamilies([profileObj.family_id]);
+          if (profileObj.stage_id) setAssignedStages([profileObj.stage_id]);
         } else if (validRole === 'servant') {
           // 1. Fetch servant's active groups
           const { data: userGroupServants } = await supabase
@@ -200,7 +214,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { error: error as Error | null };
   };
 
-  const signUp = async (email: string, pass: string, fullName: string, requestedFamilyId?: string) => {
+  const signUp = async (
+    email: string,
+    pass: string,
+    fullName: string,
+    requestedFamilyId?: string,
+    requestedRole?: UserRole,
+    requestedStageId?: string,
+    requestedChildId?: string
+  ) => {
     if (!isConfigured) {
       return { error: new Error('يرجى أولاً وضع بيانات Supabase في ملف .env') };
     }
@@ -211,6 +233,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         data: {
           full_name: fullName,
           requested_family_id: requestedFamilyId || null,
+          role: requestedRole || 'servant',
+          requested_stage_id: requestedStageId || null,
+          requested_child_id: requestedChildId || null,
         },
       },
     });

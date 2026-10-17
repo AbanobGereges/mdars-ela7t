@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRealtimePoints } from '../../hooks/useRealtimePoints';
 import { supabase } from '../../lib/supabase';
-import { PointRule, ChildLeaderboardEntry, Family } from '../../types/database';
+import { PointRule, ChildLeaderboardEntry, Family, Profile, Stage, Group } from '../../types/database';
 import { ChildCard } from '../../components/servant/ChildCard';
 import { QuickPointsModal } from '../../components/servant/QuickPointsModal';
 import { FamilyPointsModal } from '../../components/common/FamilyPointsModal';
@@ -15,6 +15,7 @@ import {
   PlusCircle,
   Award,
   RefreshCw,
+  CheckCircle2,
 } from 'lucide-react';
 
 export const ServantHome: React.FC = () => {
@@ -32,7 +33,38 @@ export const ServantHome: React.FC = () => {
   const [targetFamilyForPoints, setTargetFamilyForPoints] = useState<string | null>(null);
   const [refreshingAssignments, setRefreshingAssignments] = useState<boolean>(false);
 
-  // Fetch point rules, stages, and groups
+  // Student accounts & Attendance Stamp states
+  const [pendingStudents, setPendingStudents] = useState<Profile[]>([]);
+  const [approvingStudentId, setApprovingStudentId] = useState<string | null>(null);
+  const [stampNotification, setStampNotification] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const fetchPendingStudents = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'student')
+        .eq('is_approved', false);
+
+      if (!error && data) {
+        if (role === 'servant' && assignedStages.length > 0) {
+          const relevant = (data as Profile[]).filter(
+            (p) =>
+              (p.stage_id && assignedStages.includes(p.stage_id)) ||
+              (p.family_id && assignedFamilies.includes(p.family_id)) ||
+              (!p.stage_id && !p.family_id)
+          );
+          setPendingStudents(relevant);
+        } else {
+          setPendingStudents(data as Profile[]);
+        }
+      }
+    } catch (err) {
+      console.warn('Error fetching pending students:', err);
+    }
+  };
+
+  // Fetch point rules, stages, groups, and pending students
   useEffect(() => {
     const fetchMetadata = async () => {
       const [rulesRes, stagesRes, groupsRes] = await Promise.all([
@@ -43,10 +75,70 @@ export const ServantHome: React.FC = () => {
       if (rulesRes.data) setRules(rulesRes.data as PointRule[]);
       if (stagesRes.data) setAvailableStages(stagesRes.data as Stage[]);
       if (groupsRes.data) setAvailableGroups(groupsRes.data as Group[]);
+      await fetchPendingStudents();
     };
 
     fetchMetadata();
-  }, []);
+  }, [role, assignedStages, assignedFamilies]);
+
+  const handleApproveStudent = async (studentUser: Profile) => {
+    setApprovingStudentId(studentUser.id);
+    try {
+      const { error } = await supabase.rpc('approve_student_account', {
+        target_user_id: studentUser.id,
+      });
+      if (error) {
+        console.warn('RPC approve_student_account fallback:', error);
+        await supabase.from('profiles').update({ is_approved: true }).eq('id', studentUser.id);
+      }
+      setPendingStudents((prev) => prev.filter((s) => s.id !== studentUser.id));
+      setStampNotification({ type: 'success', text: `✨ تم اعتماد حساب المخدومة (${studentUser.full_name}) بنجاح!` });
+    } catch (err: unknown) {
+      setStampNotification({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'فشل اعتماد الحساب',
+      });
+    } finally {
+      setApprovingStudentId(null);
+    }
+  };
+
+  const handleQuickStampChild = async (childId: string, childName: string) => {
+    try {
+      const { data, error } = await supabase.rpc('record_student_attendance', {
+        target_child_id: childId,
+        attendance_method: 'servant_stamp',
+      });
+
+      if (error) throw error;
+      const res = data as {
+        success: boolean;
+        message: string;
+        already_registered?: boolean;
+        is_early?: boolean;
+        points_awarded?: number;
+        stamp_index?: number;
+      };
+
+      if (!res.success && res.already_registered) {
+        setStampNotification({
+          type: 'error',
+          text: `⚠️ ${childName}: ${res.message}`,
+        });
+      } else {
+        setStampNotification({
+          type: 'success',
+          text: `🌸 ${childName}: ${res.message}`,
+        });
+        await refreshData();
+      }
+    } catch (err: unknown) {
+      setStampNotification({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'فشل تسجيل الختم',
+      });
+    }
+  };
 
   // Names of assigned groups
   const assignedGroupNames = useMemo(() => {
@@ -125,6 +217,7 @@ export const ServantHome: React.FC = () => {
     setRefreshingAssignments(true);
     await refreshProfile();
     await refreshData();
+    await fetchPendingStudents();
     setRefreshingAssignments(false);
   };
 
@@ -200,6 +293,77 @@ export const ServantHome: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Stamp Notification Toast */}
+      {stampNotification && (
+        <div
+          className={`p-4 rounded-2xl border text-xs font-bold flex items-center justify-between gap-3 transition-all shadow-sm ${
+            stampNotification.type === 'success'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+              : 'bg-rose-50 border-rose-300 text-rose-900'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            <span>{stampNotification.type === 'success' ? '✓' : '⚠️'}</span>
+            <span>{stampNotification.text}</span>
+          </div>
+          <button
+            onClick={() => setStampNotification(null)}
+            className="text-slate-400 hover:text-slate-700 font-black text-xs px-2 py-1 rounded-lg hover:bg-black/5"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Pending Student Registrations Approval Banner */}
+      {pendingStudents.length > 0 && (
+        <div className="bg-gradient-to-r from-pink-50 via-rose-50 to-pink-50 border-2 border-pink-300 rounded-3xl p-5 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🌸</span>
+              <h3 className="text-sm font-black text-rose-950">
+                مخدومي إعدادي بانتظار الاعتماد لتفعيل كارت الأختام ({pendingStudents.length})
+              </h3>
+            </div>
+            <span className="text-[11px] font-bold text-rose-700 bg-white/90 px-3 py-1 rounded-full border border-pink-200 self-start sm:self-auto">
+              متاح الاعتماد لخادم المرحلة أو الأدمن
+            </span>
+          </div>
+
+          <p className="text-xs text-rose-900/80 mb-4 font-medium">
+            سجلت هؤلاء البنات بالبريد الإلكتروني ويحتاجون لاعتماد خادم المرحلة لتفعيل حساباتهن وكارت الأختام الأربعة:
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {pendingStudents.map((stu) => (
+              <div
+                key={stu.id}
+                className="bg-white rounded-2xl p-4 border border-pink-200 shadow-xs flex items-center justify-between gap-3"
+              >
+                <div>
+                  <div className="font-black text-slate-900 text-xs">{stu.full_name}</div>
+                  <div className="text-[11px] text-slate-500 font-mono mt-0.5">{stu.email}</div>
+                  {stu.family_id && (
+                    <div className="text-[10px] text-pink-700 font-bold mt-1">
+                      أسرة: {permittedFamilies.find((f) => f.id === stu.family_id)?.name || 'الأسرة'}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => handleApproveStudent(stu)}
+                  disabled={approvingStudentId === stu.id}
+                  className="px-3.5 py-2 rounded-xl bg-pink-600 hover:bg-pink-700 text-white font-black text-xs shadow-xs transition-all active:scale-95 shrink-0 flex items-center gap-1.5"
+                >
+                  <CheckCircle2 size={14} />
+                  <span>{approvingStudentId === stu.id ? 'جاري...' : 'اعتماد'}</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Stage Filter if Servant has access to multiple stages */}
       {permittedStagesList.length > 1 && (
@@ -406,6 +570,7 @@ export const ServantHome: React.FC = () => {
                 key={entry.child.id}
                 entry={entry}
                 onOpenPointsModal={() => setActiveChildForPoints(entry)}
+                onQuickStamp={() => handleQuickStampChild(entry.child.id, entry.child.full_name)}
               />
             ))}
           </div>

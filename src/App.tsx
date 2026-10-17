@@ -19,6 +19,9 @@ import { AuditLogs } from './pages/admin/AuditLogs';
 import { ServantHome } from './pages/servant/ServantHome';
 import { ServantHistory } from './pages/servant/ServantHistory';
 
+// Student Pages
+import { StudentDashboard } from './pages/student/StudentDashboard';
+
 export const App: React.FC = () => {
   const { user, profile, role, isApproved, loading } = useAuth();
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
@@ -82,6 +85,20 @@ export const App: React.FC = () => {
           {currentTab === 'children' && <ChildrenManager />}
           {currentTab === 'rules' && <PointRulesManager />}
           {currentTab === 'audit' && <AuditLogs />}
+          {currentTab === 'student_preview' && (
+            <div>
+              <div className="bg-pink-100/90 border-b border-pink-200 px-4 py-2 text-center text-xs font-bold text-pink-900 flex items-center justify-center gap-3">
+                <span>🌸 وضع المعاينة التفاعلية لكارت أختام خدمة بنات إعدادي</span>
+                <button
+                  onClick={() => setCurrentTab('dashboard')}
+                  className="px-3 py-1 bg-white hover:bg-pink-50 border border-pink-300 rounded-lg text-pink-800 text-[11px] font-black transition-all"
+                >
+                  ← العودة للوحة الإدارة
+                </button>
+              </div>
+              <StudentDashboard />
+            </div>
+          )}
         </main>
       </div>
     );
@@ -95,10 +112,32 @@ export const App: React.FC = () => {
       <div className="min-h-screen bg-[#fbf7ee] flex flex-col">
         <Navbar currentTab={currentTab} onTabChange={setCurrentTab} />
         <main className="flex-1">
-          {currentTab === 'history' ? <ServantHistory /> : <ServantHome />}
+          {currentTab === 'history' && <ServantHistory />}
+          {currentTab === 'student_preview' && (
+            <div>
+              <div className="bg-pink-100/90 border-b border-pink-200 px-4 py-2 text-center text-xs font-bold text-pink-900 flex items-center justify-center gap-3">
+                <span>🌸 وضع المعاينة التفاعلية لكارت أختام خدمة بنات إعدادي</span>
+                <button
+                  onClick={() => setCurrentTab('service')}
+                  className="px-3 py-1 bg-white hover:bg-pink-50 border border-pink-300 rounded-lg text-pink-800 text-[11px] font-black transition-all"
+                >
+                  ← العودة للوحة الخدمة
+                </button>
+              </div>
+              <StudentDashboard />
+            </div>
+          )}
+          {currentTab !== 'history' && currentTab !== 'student_preview' && <ServantHome />}
         </main>
       </div>
     );
+  }
+
+  // -------------------------------------------------------------
+  // STUDENT PANEL (خدمة بنات إعدادي & كارت الأختام)
+  // -------------------------------------------------------------
+  if (role === 'student') {
+    return <StudentDashboard />;
   }
 
   // Default fallback

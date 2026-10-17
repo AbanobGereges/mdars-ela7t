@@ -5,9 +5,10 @@ import { Award, Plus, Sparkles, Star } from 'lucide-react';
 interface ChildCardProps {
   entry: ChildLeaderboardEntry;
   onOpenPointsModal: () => void;
+  onQuickStamp?: () => void;
 }
 
-export const ChildCard: React.FC<ChildCardProps> = ({ entry, onOpenPointsModal }) => {
+export const ChildCard: React.FC<ChildCardProps> = ({ entry, onOpenPointsModal, onQuickStamp }) => {
   const child = entry.child;
 
   return (
@@ -64,14 +65,27 @@ export const ChildCard: React.FC<ChildCardProps> = ({ entry, onOpenPointsModal }
         </div>
       </div>
 
-      {/* Action Button */}
-      <button
-        onClick={onOpenPointsModal}
-        className="mt-4 w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-church-600 to-church-700 hover:from-church-700 hover:to-church-800 text-white font-bold text-xs shadow-md active:scale-98 transition-all flex items-center justify-center gap-2"
-      >
-        <Award size={16} />
-        <span>تسجيل نقاط (إضافة / خصم)</span>
-      </button>
+      {/* Action Buttons */}
+      <div className={`mt-4 ${onQuickStamp ? 'grid grid-cols-2 gap-2' : ''}`}>
+        <button
+          onClick={onOpenPointsModal}
+          className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-church-600 to-church-700 hover:from-church-700 hover:to-church-800 text-white font-bold text-xs shadow-md active:scale-98 transition-all flex items-center justify-center gap-1.5"
+        >
+          <Award size={15} />
+          <span>تسجيل نقاط</span>
+        </button>
+
+        {onQuickStamp && (
+          <button
+            onClick={onQuickStamp}
+            className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-pink-500 to-rose-600 hover:from-pink-600 hover:to-rose-700 text-white font-black text-xs shadow-md active:scale-98 transition-all flex items-center justify-center gap-1.5"
+            title="تسجيل حضور اليوم وختم كارت الأختام"
+          >
+            <span>🌸</span>
+            <span>ختم الحضور</span>
+          </button>
+        )}
+      </div>
     </div>
   );
 };

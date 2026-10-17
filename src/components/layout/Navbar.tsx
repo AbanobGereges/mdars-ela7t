@@ -267,7 +267,20 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange, isDispl
           )}
 
           {/* Right Action Icons & User Status */}
-          <div className="flex items-center gap-3">
+            {/* Prep Girls Stamp Card quick button */}
+            <button
+              onClick={() => onTabChange?.('student_preview')}
+              className={`p-2 px-3 rounded-xl border flex items-center gap-1.5 text-xs font-bold transition-all shadow-sm ${
+                currentTab === 'student_preview'
+                  ? 'bg-pink-700 text-white border-pink-800'
+                  : 'bg-pink-50 hover:bg-pink-100 text-pink-900 border-pink-300'
+              }`}
+              title="معاينة كارت أختام خدمة إعدادي"
+            >
+              <span>🌸</span>
+              <span className="hidden md:inline">كارت الأختام</span>
+            </button>
+
             {/* TV Display quick link */}
             <button
               onClick={() => onTabChange?.('display')}

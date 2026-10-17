@@ -359,6 +359,8 @@
         renderDisplayScreen();
       } else if (currentRole === 'admin') {
         renderAdminDashboard();
+      } else if (currentRole === 'student') {
+        renderStudentStampCard();
       } else {
         renderServantHome();
       }
@@ -789,6 +791,8 @@
         renderDisplayScreen();
       } else if (currentRole === 'admin') {
         renderAdminDashboard();
+      } else if (currentRole === 'student') {
+        renderStudentStampCard();
       } else if (currentRole === 'servant') {
         renderServantHome();
       }
@@ -1876,6 +1880,10 @@
                 <span class="w-2 h-2 rounded-full ${isRealtimeConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}"></span>
                 <span>${isRealtimeConnected ? 'بث مباشر Realtime' : 'جاري الاتصال...'}</span>
               </div>
+              <button onclick="openStudentStampCardPreview()" class="px-3 py-1.5 rounded-xl bg-pink-100 hover:bg-pink-200 text-pink-950 font-bold text-xs border border-pink-300 flex items-center gap-1 transition-all" title="معاينة كارت أختام خدمة بنات إعدادي">
+                <span>🌸</span>
+                <span>كارت أختام إعدادي</span>
+              </button>
               <button onclick="isDisplayOnlyMode=true; renderDisplayScreen();" class="px-3 py-1.5 rounded-xl bg-church-100 text-church-900 font-bold text-xs border border-church-300">
                 🖥️ شاشة العرض
               </button>
@@ -1983,9 +1991,13 @@
             </div>
           </div>
 
-          <div class="mt-4 flex items-center gap-2">
+          <div class="mt-4 flex items-center gap-1.5">
             <button onclick="openQuickPointModal('${entry.child.id}')" class="flex-1 py-2.5 rounded-xl bg-church-600 hover:bg-church-700 text-white font-black text-xs shadow-sm transition-all active:scale-95">
               ★ تسجيل نقاط
+            </button>
+            <button onclick="handleServantStampChild('${entry.child.id}')" title="ختم كارت حضور بنات إعدادي" class="px-2.5 py-2.5 rounded-xl bg-pink-50 hover:bg-pink-100 text-pink-900 border border-pink-200 font-black text-xs flex items-center gap-1 transition-all active:scale-95 shadow-2xs">
+              <span>🌸</span>
+              <span>ختم</span>
             </button>
             <button onclick="openChildModal('${entry.child.id}')" title="تعديل بيانات الطفل" class="px-3 py-2.5 rounded-xl bg-church-100 hover:bg-church-200 text-church-800 font-bold text-xs border border-church-200 transition-all active:scale-95">
               ✏️
@@ -1993,6 +2005,15 @@
           </div>
         </div>
       `;
+    }
+
+    async function handleServantStampChild(childId) {
+      const child = cacheChildren.find(c => c.id === childId);
+      if (!child) return;
+      const now = new Date();
+      const isEarly = (now.getHours() < 9) || (now.getHours() === 9 && now.getMinutes() <= 15);
+      if (!confirm(`هل تريد ختم كارت الحضور لـ (${child.full_name}) اليوم؟\n${isEarly ? '✨ التوقيت الحالي يُحتسب: حضور بدري (+20 نقطة)' : 'التوقيت الحالي يُحتسب: حضور عادي (+10 نقاط)'}`)) return;
+      await handleCheckInStudentAttendance(childId, isEarly);
     }
 
     function filterServantKids(query) {
@@ -2868,6 +2889,10 @@
               <button onclick="openFamilyPointModal()" class="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5">
                 <span>⭐ إضافة نقاط للأسرة</span>
               </button>
+              <button onclick="openStudentStampCardPreview()" class="px-3 py-1.5 rounded-xl bg-pink-100 hover:bg-pink-200 text-pink-950 font-bold text-xs border border-pink-300 flex items-center gap-1 transition-all" title="معاينة كارت أختام خدمة بنات إعدادي">
+                <span>🌸</span>
+                <span>كارت أختام إعدادي</span>
+              </button>
               <button onclick="isDisplayOnlyMode=true; renderDisplayScreen();" class="px-3 py-1.5 rounded-xl bg-church-100 text-church-900 font-bold text-xs border border-church-300">
                 🖥️ شاشة العرض TV
               </button>
@@ -3033,9 +3058,10 @@
                       <td class="p-3 font-bold text-slate-900">${p.full_name}</td>
                       <td class="p-3 text-slate-500 font-mono">${p.email}</td>
                       <td class="p-3">
-                        <select onchange="updateUserRole('${p.id}', this.value)" class="text-xs bg-white border border-church-300 rounded-lg px-2 py-1 font-bold ${p.role==='admin'?'text-amber-700':p.role==='display'?'text-blue-700':'text-slate-700'}">
+                        <select onchange="updateUserRole('${p.id}', this.value)" class="text-xs bg-white border border-church-300 rounded-lg px-2 py-1 font-bold ${p.role==='admin'?'text-amber-700':p.role==='student'?'text-pink-700':p.role==='display'?'text-blue-700':'text-slate-700'}">
                           <option value="admin" ${p.role==='admin'?'selected':''}>👑 أدمن</option>
                           <option value="servant" ${p.role==='servant'?'selected':''}>🙋 خادم</option>
+                          <option value="student" ${p.role==='student'?'selected':''}>🌸 مخدوم (إعدادي)</option>
                           <option value="display" ${p.role==='display'?'selected':''}>🖥️ شاشة عرض</option>
                         </select>
                       </td>
@@ -3078,13 +3104,21 @@
 
     async function approveUser(userId) {
       try {
-        // Try calling the stored RPC which confirms email in auth.users AND approves profile
-        const { error: rpcErr } = await supabaseClient.rpc('approve_user', { target_user_id: userId });
-        if (rpcErr) {
-          console.warn('RPC approve_user note:', rpcErr);
-          // Fallback direct update
-          const { error } = await supabaseClient.from('profiles').update({ is_approved: true }).eq('id', userId);
-          if (error) throw error;
+        const targetUser = cacheProfiles.find(p => p.id === userId);
+        if (targetUser && targetUser.role === 'student') {
+          const { error: stuRpcErr } = await supabaseClient.rpc('approve_student_account', { target_user_id: userId });
+          if (stuRpcErr) {
+            console.warn('RPC approve_student_account fallback note:', stuRpcErr);
+            await supabaseClient.from('profiles').update({ is_approved: true }).eq('id', userId);
+          }
+        } else {
+          // Try calling the stored RPC which confirms email in auth.users AND approves profile
+          const { error: rpcErr } = await supabaseClient.rpc('approve_user', { target_user_id: userId });
+          if (rpcErr) {
+            console.warn('RPC approve_user note:', rpcErr);
+            const { error } = await supabaseClient.from('profiles').update({ is_approved: true }).eq('id', userId);
+            if (error) throw error;
+          }
         }
         await loadAllData();
         renderAdminDashboard();
@@ -4793,16 +4827,398 @@
       if (countSpan) countSpan.textContent = filteredAuditLogs.length;
     }
 
-    function resetAuditFilters() {
-      filteredAuditLogs = null;
-      const c = document.getElementById('audit-f-child'); if (c) c.value = '';
-      const f = document.getElementById('audit-f-family'); if (f) f.value = '';
-      const s = document.getElementById('audit-f-stage'); if (s) s.value = '';
-      const srv = document.getElementById('audit-f-servant'); if (srv) srv.value = '';
-      const t = document.getElementById('audit-f-type'); if (t) t.value = '';
-      const p = document.getElementById('audit-f-period'); if (p) p.value = 'all';
-      const cd = document.getElementById('audit-f-custom-date'); if (cd) { cd.value = ''; cd.classList.add('hidden'); }
-      applyAuditFilters();
+    // ===========================================================================
+    // 7. STUDENT INTERFACE: 4-STAMP REWARD CARD & QR ATTENDANCE (خدمة بنات إعدادي)
+    // ===========================================================================
+    var studentViewChildId = null;
+    var studentClockInterval = null;
+
+    function openStudentStampCardPreview(targetChildId = null) {
+      studentViewChildId = targetChildId;
+      renderStudentStampCard(targetChildId);
+    }
+
+    async function renderStudentStampCard(forcedChildId = null) {
+      const root = document.getElementById('app-root');
+      if (!root) return;
+
+      // Determine active child
+      let activeChild = null;
+      if (forcedChildId) {
+        activeChild = cacheChildren.find(c => c.id === forcedChildId);
+      } else if (currentProfile && currentProfile.child_id) {
+        activeChild = cacheChildren.find(c => c.id === currentProfile.child_id);
+      } else if (currentProfile && currentProfile.full_name) {
+        activeChild = cacheChildren.find(c => c.full_name && c.full_name.trim() === currentProfile.full_name.trim());
+      }
+
+      // Fallback: pick first girl in prep stage if admin/servant previewing
+      if (!activeChild && cacheChildren.length > 0) {
+        const prepStage = cacheStages.find(s => s.name && s.name.includes('إعداد'));
+        if (prepStage) {
+          activeChild = cacheChildren.find(c => c.stage_id === prepStage.id) || cacheChildren[0];
+        } else {
+          activeChild = cacheChildren[0];
+        }
+      }
+
+      // Fetch attendances for this child
+      let childAttendances = [];
+      let totalPts = 0;
+      if (activeChild && supabaseClient) {
+        try {
+          const [attRes, ptsRes] = await Promise.all([
+            supabaseClient.from('attendances').select('*').eq('child_id', activeChild.id).order('attended_at', { ascending: true }),
+            supabaseClient.from('point_logs').select('points').eq('child_id', activeChild.id).eq('is_reverted', false)
+          ]);
+          if (attRes.data) childAttendances = attRes.data;
+          if (ptsRes.data) totalPts = ptsRes.data.reduce((sum, p) => sum + (p.points || 0), 0);
+        } catch (e) {
+          console.warn('Error loading student attendances:', e);
+        }
+      }
+
+      const todayStr = new Date().toISOString().split('T')[0];
+      const todayAtt = childAttendances.find(a => a.attendance_date === todayStr);
+
+      // Early hours check: before 9:15 AM
+      const now = new Date();
+      const currentH = now.getHours();
+      const currentM = now.getMinutes();
+      const isEarly = (currentH < 9) || (currentH === 9 && currentM <= 15);
+
+      // Cycle attendances: last 4
+      const cycleAttendances = childAttendances.slice(-4);
+      const slots = [0, 1, 2, 3].map(idx => cycleAttendances[idx] || null);
+      const isCardCompleted = cycleAttendances.length === 4;
+
+      const timeNowStr = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      root.innerHTML = `
+        <div class="min-h-screen bg-[#fff5f7] pb-12 text-slate-800 font-sans selection:bg-pink-200" dir="rtl">
+          <!-- Top Bar -->
+          <header class="bg-white/95 backdrop-blur-md border-b border-pink-200 sticky top-0 z-40 shadow-xs">
+            <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-2xl bg-pink-100 border border-pink-300 flex items-center justify-center overflow-hidden shadow-xs">
+                  <img src="girls-prep-logo.png" onerror="this.onerror=null; this.src='church-logo.jpg';" alt="شعار خدمة بنات إعدادي" class="w-full h-full object-contain" />
+                </div>
+                <div>
+                  <h1 class="text-sm font-black text-slate-900 leading-tight">خدمة بنات إعدادي</h1>
+                  <p class="text-[10px] text-pink-700 font-bold">كنيسة السيدة العذراء والشهيد بولس — الحضرة الجديدة</p>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <div class="flex items-center gap-1.5 bg-amber-50 border border-amber-200 px-3 py-1 rounded-xl text-xs font-black text-amber-900">
+                  <span>⭐</span>
+                  <span>${totalPts} نقطة</span>
+                </div>
+                ${(currentRole === 'admin' || currentRole === 'servant') ? `
+                  <button onclick="currentRole === 'admin' ? renderAdminDashboard() : renderServantHome()" class="px-3 py-1.5 rounded-xl bg-church-800 hover:bg-church-900 text-white text-xs font-bold shadow-xs">
+                    ← عودة للوحة التحكم
+                  </button>
+                ` : `
+                  <button onclick="handleSignOut()" class="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold">
+                    خروج
+                  </button>
+                `}
+              </div>
+            </div>
+          </header>
+
+          <main class="max-w-xl mx-auto px-4 pt-6 space-y-4">
+            <!-- Student Header Profile Card -->
+            <div class="bg-gradient-to-r from-pink-500 via-rose-500 to-pink-600 rounded-3xl p-5 text-white shadow-lg relative overflow-hidden">
+              <div class="flex items-center justify-between relative z-10">
+                <div>
+                  <span class="inline-block px-2.5 py-0.5 rounded-full bg-white/20 text-[10px] font-bold tracking-wide mb-1">
+                    🌸 مرحباً بكِ يا بطلة
+                  </span>
+                  <h2 class="text-xl font-black text-white">
+                    ${activeChild ? activeChild.full_name : (currentProfile?.full_name || 'مخدومة إعدادي')}
+                  </h2>
+                  <p class="text-xs text-pink-100 font-semibold mt-0.5">
+                    ${activeChild?.family?.name ? `أسرة: ${activeChild.family.name}` : 'خدمة بنات إعدادي'} • ${activeChild?.stage?.name || 'مرحلة إعدادي'}
+                  </p>
+                </div>
+
+                <div class="text-center bg-white/20 backdrop-blur-sm border border-white/30 rounded-2xl p-2.5 px-4 shadow-inner">
+                  <span class="block text-[10px] font-bold text-pink-100">رصيد النقاط</span>
+                  <span class="text-2xl font-black text-white">${totalPts}</span>
+                  <span class="text-[10px] block font-bold text-pink-200">نقطة ⭐</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Attendance Action Bar with Live Clock -->
+            <div class="bg-white rounded-3xl p-4 border border-pink-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div class="flex items-center gap-3">
+                <div class="w-12 h-12 rounded-2xl bg-pink-50 border border-pink-200 flex items-center justify-center text-pink-600 shadow-2xs text-xl">
+                  ⏰
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-500">الوقت الآن:</span>
+                    <span id="stamp-card-clock" class="font-mono text-sm font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded-lg">
+                      ${timeNowStr}
+                    </span>
+                  </div>
+                  <div class="text-[11px] font-bold mt-1">
+                    ${todayAtt ? `
+                      <span class="text-emerald-700 font-black flex items-center gap-1">
+                        ✓ تم تسجيل حضورك اليوم بنجاح (${todayAtt.is_early ? 'حضور بدري +20' : 'حضور عادي +10'})
+                      </span>
+                    ` : isEarly ? `
+                      <span class="text-pink-600 font-black">
+                        ✨ الحضور الآن قبل 09:15 ص: حضور بدري (+20 نقطة)!
+                      </span>
+                    ` : `
+                      <span class="text-amber-700 font-bold">
+                        الحضور الآن: حضور عادي (+10 نقاط)
+                      </span>
+                    `}
+                  </div>
+                </div>
+              </div>
+
+              ${!todayAtt && activeChild ? `
+                <button onclick="handleCheckInStudentAttendance('${activeChild.id}', ${isEarly})" id="btn-self-checkin" class="w-full sm:w-auto px-5 py-3 rounded-2xl bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white font-black text-xs shadow-md transition-all active:scale-95 flex items-center justify-center gap-2">
+                  <span>📷</span>
+                  <span>تسجيل الحضور بالـ QR</span>
+                </button>
+              ` : `
+                <div class="px-4 py-2 bg-emerald-50 border border-emerald-200 rounded-2xl text-emerald-800 text-xs font-black flex items-center gap-1 shadow-2xs">
+                  <span>✓ مسجل اليوم</span>
+                </div>
+              `}
+            </div>
+
+            <!-- Celebratory Banner if 4 Stamps collected -->
+            ${isCardCompleted ? `
+              <div class="bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 rounded-3xl p-4 text-slate-950 font-black text-center shadow-lg border-2 border-yellow-300 animate-bounce">
+                <span class="text-2xl block mb-1">🎁 🎉 👑</span>
+                <h3 class="text-base font-black text-slate-900">مبروك يا بطلة! جمعتِ ٤ أختام من غير غياب!</h3>
+                <p class="text-xs text-yellow-950 font-bold mt-0.5">استلمي هديتك المميزة من الخادم في نهاية الخدمة ✨</p>
+              </div>
+            ` : ''}
+
+            <!-- ============================================================== -->
+            <!-- THE 4-STAMP CARD (Exact replication of user uploaded image)    -->
+            <!-- ============================================================== -->
+            <div class="bg-white rounded-3xl border-2 border-pink-300 p-5 shadow-xl relative overflow-hidden">
+              <!-- Watermark -->
+              <div class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-5">
+                <img src="girls-prep-logo.png" onerror="this.style.display='none'" class="w-80 h-80 object-contain" />
+              </div>
+
+              <!-- Header -->
+              <div class="relative z-10 flex items-center justify-between border-b border-pink-100 pb-3 mb-4">
+                <!-- Left: St. Mary & St. Paul -->
+                <div class="w-14 h-16 rounded-xl overflow-hidden flex items-center justify-center shrink-0">
+                  <img src="stamp-card-sample.jpg" onerror="this.src='church-logo.jpg'" alt="السيدة العذراء وبولس الرسول" class="w-full h-full object-contain" />
+                </div>
+
+                <!-- Center: Blue Cross & Church Name -->
+                <div class="text-center px-2">
+                  <div class="text-church-600 text-3xl font-black leading-none mb-1">✝</div>
+                  <h3 class="text-xs sm:text-sm font-black text-[#1e3a8a] leading-tight">كنيسة السيدة العذراء مريم</h3>
+                  <h4 class="text-xs sm:text-sm font-black text-[#1e3a8a] leading-tight">والقديس بولس الرسول</h4>
+                  <p class="text-[10px] font-bold text-[#1e3a8a] mt-0.5">الحضرة الجديدة</p>
+                </div>
+
+                <!-- Right: Girls Prep Logo -->
+                <div class="w-16 h-16 rounded-2xl flex items-center justify-center overflow-hidden shrink-0">
+                  <img src="girls-prep-logo.png" onerror="this.src='church-logo.jpg'" alt="خدمة بنات إعدادي" class="w-full h-full object-contain drop-shadow-xs" />
+                </div>
+              </div>
+
+              <!-- Title -->
+              <div class="relative z-10 text-center mb-5">
+                <h2 class="text-base sm:text-lg font-black text-slate-900 tracking-wide">
+                  جمع ٤ اختام من غير غياب ليك هديه
+                </h2>
+              </div>
+
+              <!-- The 4 Alternating Pink Stamp Rows -->
+              <div class="relative z-10 space-y-3.5">
+                <!-- ROW 1 (Stamp on RIGHT) -->
+                <div class="bg-[#fbcfe8]/70 hover:bg-[#fbcfe8]/90 border border-[#f472b6]/60 rounded-3xl p-3.5 flex items-center justify-between shadow-xs transition-all">
+                  <div class="flex-1 space-y-1.5 pr-2">
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs font-black text-slate-900">تاريخ اليوم:</span>
+                      <span class="font-mono text-xs font-bold text-slate-800 bg-white/80 px-2 py-0.5 rounded-lg border border-pink-200">
+                        ${slots[0] ? new Date(slots[0].attendance_date).toLocaleDateString('ar-EG', {day:'2-digit',month:'2-digit',year:'numeric'}) : '  /  /  '}
+                      </span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs font-black text-slate-900">الحضور بدري</span>
+                      <div class="w-5 h-5 rounded-md border-2 border-slate-700 flex items-center justify-center font-bold text-xs ${slots[0]?.is_early ? 'bg-pink-600 text-white border-pink-700' : 'bg-white/80'}">
+                        ${slots[0]?.is_early ? '✓' : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-pink-400 bg-white/90 flex items-center justify-center overflow-hidden shadow-inner shrink-0 relative">
+                    ${slots[0] ? `
+                      <div class="w-full h-full p-1 flex items-center justify-center">
+                        <img src="girls-prep-logo.png" onerror="this.src='church-logo.jpg'" class="w-full h-full object-contain rotate-[-6deg] drop-shadow-xs" />
+                      </div>
+                    ` : '<span class="text-[11px] font-bold text-pink-400">ختم ١</span>'}
+                  </div>
+                </div>
+
+                <!-- ROW 2 (Stamp on LEFT) -->
+                <div class="bg-[#fbcfe8]/70 hover:bg-[#fbcfe8]/90 border border-[#f472b6]/60 rounded-3xl p-3.5 flex items-center justify-between shadow-xs transition-all">
+                  <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-pink-400 bg-white/90 flex items-center justify-center overflow-hidden shadow-inner shrink-0 relative">
+                    ${slots[1] ? `
+                      <div class="w-full h-full p-1 flex items-center justify-center">
+                        <img src="girls-prep-logo.png" onerror="this.src='church-logo.jpg'" class="w-full h-full object-contain rotate-[6deg] drop-shadow-xs" />
+                      </div>
+                    ` : '<span class="text-[11px] font-bold text-pink-400">ختم ٢</span>'}
+                  </div>
+                  <div class="flex-1 space-y-1.5 pl-2 text-left" dir="ltr">
+                    <div class="flex items-center gap-2 justify-end" dir="rtl">
+                      <span class="text-xs font-black text-slate-900">تاريخ اليوم:</span>
+                      <span class="font-mono text-xs font-bold text-slate-800 bg-white/80 px-2 py-0.5 rounded-lg border border-pink-200">
+                        ${slots[1] ? new Date(slots[1].attendance_date).toLocaleDateString('ar-EG', {day:'2-digit',month:'2-digit',year:'numeric'}) : '  /  /  '}
+                      </span>
+                    </div>
+                    <div class="flex items-center gap-2 justify-end" dir="rtl">
+                      <span class="text-xs font-black text-slate-900">الحضور بدري</span>
+                      <div class="w-5 h-5 rounded-md border-2 border-slate-700 flex items-center justify-center font-bold text-xs ${slots[1]?.is_early ? 'bg-pink-600 text-white border-pink-700' : 'bg-white/80'}">
+                        ${slots[1]?.is_early ? '✓' : ''}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- ROW 3 (Stamp on RIGHT) -->
+                <div class="bg-[#fbcfe8]/70 hover:bg-[#fbcfe8]/90 border border-[#f472b6]/60 rounded-3xl p-3.5 flex items-center justify-between shadow-xs transition-all">
+                  <div class="flex-1 space-y-1.5 pr-2">
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs font-black text-slate-900">تاريخ اليوم:</span>
+                      <span class="font-mono text-xs font-bold text-slate-800 bg-white/80 px-2 py-0.5 rounded-lg border border-pink-200">
+                        ${slots[2] ? new Date(slots[2].attendance_date).toLocaleDateString('ar-EG', {day:'2-digit',month:'2-digit',year:'numeric'}) : '  /  /  '}
+                      </span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs font-black text-slate-900">الحضور بدري</span>
+                      <div class="w-5 h-5 rounded-md border-2 border-slate-700 flex items-center justify-center font-bold text-xs ${slots[2]?.is_early ? 'bg-pink-600 text-white border-pink-700' : 'bg-white/80'}">
+                        ${slots[2]?.is_early ? '✓' : ''}
+                      </div>
+                    </div>
+                  </div>
+                  <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-pink-400 bg-white/90 flex items-center justify-center overflow-hidden shadow-inner shrink-0 relative">
+                    ${slots[2] ? `
+                      <div class="w-full h-full p-1 flex items-center justify-center">
+                        <img src="girls-prep-logo.png" onerror="this.src='church-logo.jpg'" class="w-full h-full object-contain rotate-[-4deg] drop-shadow-xs" />
+                      </div>
+                    ` : '<span class="text-[11px] font-bold text-pink-400">ختم ٣</span>'}
+                  </div>
+                </div>
+
+                <!-- ROW 4 (Stamp on LEFT) -->
+                <div class="bg-[#fbcfe8]/70 hover:bg-[#fbcfe8]/90 border border-[#f472b6]/60 rounded-3xl p-3.5 flex items-center justify-between shadow-xs transition-all">
+                  <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-pink-400 bg-white/90 flex items-center justify-center overflow-hidden shadow-inner shrink-0 relative">
+                    ${slots[3] ? `
+                      <div class="w-full h-full p-1 flex items-center justify-center">
+                        <img src="girls-prep-logo.png" onerror="this.src='church-logo.jpg'" class="w-full h-full object-contain rotate-[7deg] drop-shadow-xs" />
+                      </div>
+                    ` : '<span class="text-[11px] font-bold text-pink-400">ختم ٤</span>'}
+                  </div>
+                  <div class="flex-1 space-y-1.5 pl-2 text-left" dir="ltr">
+                    <div class="flex items-center gap-2 justify-end" dir="rtl">
+                      <span class="text-xs font-black text-slate-900">تاريخ اليوم:</span>
+                      <span class="font-mono text-xs font-bold text-slate-800 bg-white/80 px-2 py-0.5 rounded-lg border border-pink-200">
+                        ${slots[3] ? new Date(slots[3].attendance_date).toLocaleDateString('ar-EG', {day:'2-digit',month:'2-digit',year:'numeric'}) : '  /  /  '}
+                      </span>
+                    </div>
+                    <div class="flex items-center gap-2 justify-end" dir="rtl">
+                      <span class="text-xs font-black text-slate-900">الحضور بدري</span>
+                      <div class="w-5 h-5 rounded-md border-2 border-slate-700 flex items-center justify-center font-bold text-xs ${slots[3]?.is_early ? 'bg-pink-600 text-white border-pink-700' : 'bg-white/80'}">
+                        ${slots[3]?.is_early ? '✓' : ''}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Footer -->
+              <div class="mt-5 pt-3 border-t border-pink-100 text-center">
+                <p class="text-[11px] text-pink-700 font-bold">
+                  🌸 احرصي على الحضور مبكراً لكسب نقاط إضافية وجمع الأختام لاستلام الهدية!
+                </p>
+              </div>
+            </div>
+          </main>
+        </div>
+      `;
+
+      // Live Clock interval
+      clearInterval(studentClockInterval);
+      studentClockInterval = setInterval(() => {
+        const el = document.getElementById('stamp-card-clock');
+        if (el) {
+          el.textContent = new Date().toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+      }, 1000);
+    }
+
+    async function handleCheckInStudentAttendance(childId, isEarly) {
+      if (!childId || !supabaseClient) return;
+
+      const btn = document.getElementById('btn-self-checkin');
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'جاري التوثيق...';
+      }
+
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      try {
+        // Call RPC
+        const { data: rpcRes, error: rpcErr } = await supabaseClient.rpc('record_student_attendance', {
+          target_child_id: childId,
+          attendance_method: 'qr_self',
+          force_early: isEarly
+        });
+
+        if (rpcErr) {
+          // Fallback direct insert
+          const pts = isEarly ? 20 : 10;
+          const childObj = cacheChildren.find(c => c.id === childId);
+          await supabaseClient.from('attendances').insert({
+            child_id: childId,
+            stage_id: childObj?.stage_id,
+            family_id: childObj?.family_id,
+            attendance_date: todayStr,
+            attended_at: new Date().toISOString(),
+            is_early: isEarly,
+            method: 'qr_self',
+            points_awarded: pts
+          });
+
+          await supabaseClient.from('point_logs').insert({
+            child_id: childId,
+            family_id: childObj?.family_id,
+            stage_id: childObj?.stage_id,
+            points: pts,
+            reason: isEarly ? 'حضور بدري ممتاز (ختم كارت إعدادي)' : 'حضور الخدمة (ختم كارت إعدادي)',
+            servant_id: currentUser?.id
+          });
+        }
+
+        sounds.playSuccess();
+        triggerConfetti();
+        showToast('🎉 تم تسجيل حضورك بنجاح وطباعة الختم على كارتك!', true);
+        await renderStudentStampCard(childId);
+      } catch (err) {
+        alert(err.message || 'فشل تسجيل الحضور، قد يكون تم تسجيلك اليوم بالفعل');
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'تسجيل الحضور بالـ QR';
+        }
+      }
     }
 
     // Initialize as soon as DOM is ready

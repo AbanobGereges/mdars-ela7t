@@ -1,7 +1,7 @@
-export type UserRole = 'admin' | 'servant' | 'display';
+export type UserRole = 'admin' | 'servant' | 'display' | 'student';
 
 export function isUserRole(value: unknown): value is UserRole {
-  return value === 'admin' || value === 'servant' || value === 'display';
+  return value === 'admin' || value === 'servant' || value === 'display' || value === 'student';
 }
 
 export type PointRuleType = 'add' | 'deduct';
@@ -16,8 +16,30 @@ export interface Profile {
   full_name: string;
   role: UserRole;
   is_approved: boolean;
+  child_id?: string | null;
+  stage_id?: string | null;
+  family_id?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface Attendance {
+  id: string;
+  child_id: string;
+  stage_id: string;
+  family_id?: string | null;
+  attendance_date: string;
+  attended_at: string;
+  is_early: boolean;
+  method: 'qr' | 'qr_self' | 'qr_servant' | 'manual';
+  recorded_by?: string | null;
+  points_awarded: number;
+  stamp_index: number;
+  cycle_number?: number;
+  created_at: string;
+  child?: Child;
+  family?: Family;
+  stage?: Stage;
 }
 
 export interface Stage {
