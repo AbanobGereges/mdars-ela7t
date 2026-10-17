@@ -3,30 +3,7 @@
 -- خدمة بنات إعدادي - منظومة الحضور الذكي وكارت الأختام
 -- ====================================================================
 
--- 1. تحويل نوع عمود role في profiles إلى text ودعم رتبة student (مخدوم / طالب)
-ALTER TABLE public.profiles ALTER COLUMN role DROP DEFAULT;
-ALTER TABLE public.profiles ALTER COLUMN role TYPE text USING role::text;
-ALTER TABLE public.profiles ALTER COLUMN role SET DEFAULT 'servant';
-
-ALTER TABLE public.profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
-ALTER TABLE public.profiles ADD CONSTRAINT profiles_role_check 
-    CHECK (role IN ('admin', 'servant', 'display', 'student'));
-
--- تحديث دالة current_user_role إن وجدت لتعيد text
-DROP FUNCTION IF EXISTS public.current_user_role();
-CREATE OR REPLACE FUNCTION public.current_user_role()
-RETURNS text AS $$
-DECLARE
-    u_role text;
-BEGIN
-    SELECT role::text INTO u_role 
-    FROM public.profiles 
-    WHERE id = auth.uid() AND is_approved = true;
-    RETURN u_role;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
-
--- 2. إضافة أعمدة الربط في profiles إن لم تكن موجودة
+-- 1. إضافة أعمدة الربط في profiles إن لم تكن موجودة
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='profiles' AND column_name='child_id') THEN
