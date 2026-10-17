@@ -10,6 +10,8 @@ interface AuthContextType {
   role: UserRole | null;
   isApproved: boolean;
   assignedFamilies: string[];
+  assignedGroups: string[];
+  assignedStages: string[];
   loading: boolean;
   isConfigured: boolean;
   signIn: (email: string, pass: string) => Promise<{ error: Error | null }>;
@@ -25,6 +27,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [assignedFamilies, setAssignedFamilies] = useState<string[]>([]);
+  const [assignedGroups, setAssignedGroups] = useState<string[]>([]);
+  const [assignedStages, setAssignedStages] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const isConfigured = isSupabaseConfigured();
 
@@ -43,7 +47,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // 2. Set profile and fetch assigned families if servant or admin
+      // 2. Set profile and fetch assigned groups, stages & families
       if (profData) {
         const validRole: UserRole = isUserRole(profData.role) ? profData.role : 'servant';
         const profileObj: Profile = {
@@ -58,33 +62,77 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProfile(profileObj);
 
         if (validRole === 'admin') {
-          // Admin has access to all families
-          const { data: fams } = await supabase.from('families').select('id');
-          if (fams) {
-            setAssignedFamilies(fams.map((f) => f.id));
-          }
+          // Admin has access to all groups, stages, families
+          const [famsRes, stgsRes, grpsRes] = await Promise.all([
+            supabase.from('families').select('id'),
+            supabase.from('stages').select('id'),
+            supabase.from('groups').select('id'),
+          ]);
+          if (famsRes.data) setAssignedFamilies(famsRes.data.map((f) => f.id));
+          if (stgsRes.data) setAssignedStages(stgsRes.data.map((s) => s.id));
+          if (grpsRes.data) setAssignedGroups(grpsRes.data.map((g) => g.id));
         } else if (validRole === 'servant') {
-          const { data: fsData } = await supabase
-            .from('family_servants')
-            .select('family_id')
+          // 1. Fetch servant's active groups
+          const { data: userGroupServants } = await supabase
+            .from('group_servants')
+            .select('group_id, group:groups(id, is_active)')
             .eq('servant_id', userId);
 
-          if (fsData && fsData.length > 0) {
-            setAssignedFamilies(fsData.map((f) => f.family_id));
-          } else {
-            // Fallback: If servant has no specific assigned families in family_servants yet,
-            // allow access to all active families so the servant is never blocked or left with an empty screen!
-            const { data: allFams } = await supabase.from('families').select('id').eq('is_active', true);
-            if (allFams && allFams.length > 0) {
-              setAssignedFamilies(allFams.map((f) => f.id));
-            } else {
-              setAssignedFamilies([]);
+          const activeGroupIds = (userGroupServants || [])
+            .filter((gs: any) => gs.group?.is_active !== false)
+            .map((gs: any) => gs.group_id);
+
+          setAssignedGroups(activeGroupIds);
+
+          // 2. Fetch stages permitted to these groups
+          let permittedStageIds: string[] = [];
+          if (activeGroupIds.length > 0) {
+            const { data: groupStagesData } = await supabase
+              .from('group_stages')
+              .select('stage_id')
+              .in('group_id', activeGroupIds);
+
+            if (groupStagesData) {
+              permittedStageIds = Array.from(new Set(groupStagesData.map((gs) => gs.stage_id)));
             }
           }
+
+          setAssignedStages(permittedStageIds);
+
+          // 3. Fetch permitted families
+          let allowedFamilyIds: string[] = [];
+          if (permittedStageIds.length > 0) {
+            const { data: stageFams } = await supabase
+              .from('families')
+              .select('id')
+              .in('stage_id', permittedStageIds)
+              .eq('is_active', true);
+
+            const validFamIdsInStages = (stageFams || []).map((f) => f.id);
+
+            // Check if servant has specific family assignments
+            const { data: fsData } = await supabase
+              .from('family_servants')
+              .select('family_id')
+              .eq('servant_id', userId);
+
+            if (fsData && fsData.length > 0) {
+              const specificFams = fsData
+                .map((f) => f.family_id)
+                .filter((fId) => validFamIdsInStages.includes(fId));
+              allowedFamilyIds = specificFams.length > 0 ? specificFams : validFamIdsInStages;
+            } else {
+              allowedFamilyIds = validFamIdsInStages;
+            }
+          }
+
+          setAssignedFamilies(allowedFamilyIds);
         }
       } else {
         setProfile(null);
         setAssignedFamilies([]);
+        setAssignedGroups([]);
+        setAssignedStages([]);
       }
     } catch (err) {
       console.error('Failed to load user profile details:', err);
@@ -175,6 +223,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setSession(null);
     setProfile(null);
     setAssignedFamilies([]);
+    setAssignedGroups([]);
+    setAssignedStages([]);
   };
 
   const role: UserRole | null = profile?.role && isUserRole(profile.role) ? profile.role : null;
@@ -189,6 +239,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role,
         isApproved,
         assignedFamilies,
+        assignedGroups,
+        assignedStages,
         loading,
         isConfigured,
         signIn,

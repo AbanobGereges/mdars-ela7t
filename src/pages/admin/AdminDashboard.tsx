@@ -21,6 +21,7 @@ interface StatsCounters {
   totalFamilies: number;
   totalServants: number;
   totalStages: number;
+  totalGroups: number;
 }
 
 export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> = ({ onNavigateTab }) => {
@@ -32,15 +33,17 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
     totalFamilies: 0,
     totalServants: 0,
     totalStages: 0,
+    totalGroups: 0,
   });
 
   useEffect(() => {
     const fetchCounters = async () => {
-      const [chRes, famRes, servRes, stgRes] = await Promise.all([
+      const [chRes, famRes, servRes, stgRes, grpRes] = await Promise.all([
         supabase.from('children').select('id', { count: 'exact', head: true }),
         supabase.from('families').select('id', { count: 'exact', head: true }),
         supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'servant'),
         supabase.from('stages').select('id', { count: 'exact', head: true }),
+        supabase.from('groups').select('id', { count: 'exact', head: true }),
       ]);
 
       setStats({
@@ -48,6 +51,7 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
         totalFamilies: famRes.count || 0,
         totalServants: servRes.count || 0,
         totalStages: stgRes.count || 0,
+        totalGroups: grpRes.count || 0,
       });
     };
 
@@ -86,6 +90,13 @@ export const AdminDashboard: React.FC<{ onNavigateTab: (tab: string) => void }> 
           >
             <Award size={16} />
             <span>شاشة العرض (TV Mode)</span>
+          </button>
+          <button
+            onClick={() => onNavigateTab('stages')}
+            className="px-4 py-2.5 rounded-2xl bg-church-700 hover:bg-church-600 text-white font-bold text-xs shadow-md transition-all active:scale-95 flex items-center gap-1.5 border border-church-500/30"
+          >
+            <Layers size={16} />
+            <span>المراحل والمجموعات ({stats.totalGroups})</span>
           </button>
           <button
             onClick={() => onNavigateTab('rules')}

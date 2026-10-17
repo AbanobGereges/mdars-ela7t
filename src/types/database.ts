@@ -28,6 +28,40 @@ export interface Stage {
   created_at: string;
 }
 
+export interface Group {
+  id: string;
+  name: string;
+  description?: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  // Joined or calculated fields:
+  stages?: Stage[];
+  stage_ids?: string[];
+  servants_count?: number;
+  children_count?: number;
+  servants?: Profile[];
+}
+
+export interface GroupStage {
+  id: string;
+  group_id: string;
+  stage_id: string;
+  created_at: string;
+  group?: Group;
+  stage?: Stage;
+}
+
+export interface GroupServant {
+  id: string;
+  group_id: string;
+  servant_id: string;
+  created_at: string;
+  group?: Group;
+  servant?: Profile;
+}
+
+
 export interface Family {
   id: string;
   stage_id: string;

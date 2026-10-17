@@ -39,6 +39,39 @@ CREATE TABLE IF NOT EXISTS public.stages (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- 4.1 GROUPS TABLE (المجموعات)
+CREATE TABLE IF NOT EXISTS public.groups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    is_active BOOLEAN NOT NULL DEFAULT true,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 4.2 GROUP_STAGES TABLE (ربط المجموعات بالمراحل)
+CREATE TABLE IF NOT EXISTS public.group_stages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id UUID NOT NULL REFERENCES public.groups(id) ON DELETE CASCADE,
+    stage_id UUID NOT NULL REFERENCES public.stages(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT unique_group_stage UNIQUE (group_id, stage_id)
+);
+
+-- 4.3 GROUP_SERVANTS TABLE (ربط الخدام بالمجموعات)
+CREATE TABLE IF NOT EXISTS public.group_servants (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id UUID NOT NULL REFERENCES public.groups(id) ON DELETE CASCADE,
+    servant_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT unique_group_servant UNIQUE (group_id, servant_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_group_stages_group ON public.group_stages(group_id);
+CREATE INDEX IF NOT EXISTS idx_group_stages_stage ON public.group_stages(stage_id);
+CREATE INDEX IF NOT EXISTS idx_group_servants_servant ON public.group_servants(servant_id);
+CREATE INDEX IF NOT EXISTS idx_group_servants_group ON public.group_servants(group_id);
+
 -- 5. FAMILIES TABLE (الأسر)
 CREATE TABLE IF NOT EXISTS public.families (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -173,6 +206,55 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
+CREATE OR REPLACE FUNCTION public.servant_has_stage(target_stage_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+    IF public.is_admin() THEN
+        RETURN true;
+    END IF;
+
+    IF auth.uid() IS NULL THEN
+        RETURN false;
+    END IF;
+
+    IF EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'display' AND is_approved = true) THEN
+        RETURN true;
+    END IF;
+
+    RETURN EXISTS (
+        SELECT 1 
+        FROM public.group_servants gs
+        JOIN public.groups g ON g.id = gs.group_id
+        JOIN public.group_stages gst ON gst.group_id = g.id
+        WHERE gs.servant_id = auth.uid()
+          AND g.is_active = true
+          AND gst.stage_id = target_stage_id
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+CREATE OR REPLACE FUNCTION public.servant_has_group(target_group_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+    IF public.is_admin() THEN
+        RETURN true;
+    END IF;
+
+    IF auth.uid() IS NULL THEN
+        RETURN false;
+    END IF;
+
+    RETURN EXISTS (
+        SELECT 1 
+        FROM public.group_servants gs
+        JOIN public.groups g ON g.id = gs.group_id
+        WHERE gs.servant_id = auth.uid()
+          AND gs.group_id = target_group_id
+          AND g.is_active = true
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
 -- 12. AUTOMATIC PROFILE CREATION TRIGGER
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER 
@@ -269,6 +351,9 @@ ALTER TABLE public.family_servants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.children ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.point_rules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.point_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.group_stages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.group_servants ENABLE ROW LEVEL SECURITY;
 
 -- ----------------- PROFILES POLICIES -----------------
 DROP POLICY IF EXISTS "Profiles select policy" ON public.profiles;
@@ -300,11 +385,67 @@ CREATE POLICY "Profiles delete policy" ON public.profiles
     FOR DELETE
     USING (public.is_admin());
 
+-- ----------------- GROUPS POLICIES -----------------
+DROP POLICY IF EXISTS "Groups select policy" ON public.groups;
+CREATE POLICY "Groups select policy" ON public.groups
+    FOR SELECT
+    USING (
+        public.is_admin() 
+        OR public.servant_has_group(id)
+        OR auth.role() = 'anon'
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'display')
+    );
+
+DROP POLICY IF EXISTS "Groups admin manage policy" ON public.groups;
+CREATE POLICY "Groups admin manage policy" ON public.groups
+    FOR ALL
+    USING (public.is_admin())
+    WITH CHECK (public.is_admin());
+
+-- ----------------- GROUP_STAGES POLICIES -----------------
+DROP POLICY IF EXISTS "Group stages select policy" ON public.group_stages;
+CREATE POLICY "Group stages select policy" ON public.group_stages
+    FOR SELECT
+    USING (
+        public.is_admin() 
+        OR public.servant_has_group(group_id)
+        OR auth.role() = 'anon'
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'display')
+    );
+
+DROP POLICY IF EXISTS "Group stages admin manage policy" ON public.group_stages;
+CREATE POLICY "Group stages admin manage policy" ON public.group_stages
+    FOR ALL
+    USING (public.is_admin())
+    WITH CHECK (public.is_admin());
+
+-- ----------------- GROUP_SERVANTS POLICIES -----------------
+DROP POLICY IF EXISTS "Group servants select policy" ON public.group_servants;
+CREATE POLICY "Group servants select policy" ON public.group_servants
+    FOR SELECT
+    USING (
+        public.is_admin() 
+        OR servant_id = auth.uid()
+        OR auth.role() = 'anon'
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'display')
+    );
+
+DROP POLICY IF EXISTS "Group servants admin manage policy" ON public.group_servants;
+CREATE POLICY "Group servants admin manage policy" ON public.group_servants
+    FOR ALL
+    USING (public.is_admin())
+    WITH CHECK (public.is_admin());
+
 -- ----------------- STAGES POLICIES -----------------
 DROP POLICY IF EXISTS "Stages select policy" ON public.stages;
 CREATE POLICY "Stages select policy" ON public.stages
     FOR SELECT
-    USING (true);
+    USING (
+        public.is_admin() 
+        OR public.servant_has_stage(id)
+        OR auth.role() = 'anon'
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'display')
+    );
 
 DROP POLICY IF EXISTS "Stages admin manage policy" ON public.stages;
 CREATE POLICY "Stages admin manage policy" ON public.stages
@@ -316,7 +457,12 @@ CREATE POLICY "Stages admin manage policy" ON public.stages
 DROP POLICY IF EXISTS "Families select policy" ON public.families;
 CREATE POLICY "Families select policy" ON public.families
     FOR SELECT
-    USING (true);
+    USING (
+        public.is_admin() 
+        OR public.servant_has_stage(stage_id)
+        OR auth.role() = 'anon'
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'display')
+    );
 
 DROP POLICY IF EXISTS "Families admin manage policy" ON public.families;
 CREATE POLICY "Families admin manage policy" ON public.families
@@ -340,7 +486,12 @@ CREATE POLICY "Family servants admin manage policy" ON public.family_servants
 DROP POLICY IF EXISTS "Children select policy" ON public.children;
 CREATE POLICY "Children select policy" ON public.children
     FOR SELECT
-    USING (true);
+    USING (
+        public.is_admin() 
+        OR public.servant_has_stage(stage_id)
+        OR auth.role() = 'anon'
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'display')
+    );
 
 DROP POLICY IF EXISTS "Children insert policy" ON public.children;
 CREATE POLICY "Children insert policy" ON public.children
@@ -348,6 +499,7 @@ CREATE POLICY "Children insert policy" ON public.children
     WITH CHECK (
         public.is_admin() OR (
             public.is_approved_user() AND 
+            public.servant_has_stage(stage_id) AND
             public.servant_has_family(family_id)
         )
     );
@@ -358,12 +510,14 @@ CREATE POLICY "Children update policy" ON public.children
     USING (
         public.is_admin() OR (
             public.is_approved_user() AND 
+            public.servant_has_stage(stage_id) AND
             public.servant_has_family(family_id)
         )
     )
     WITH CHECK (
         public.is_admin() OR (
             public.is_approved_user() AND 
+            public.servant_has_stage(stage_id) AND
             public.servant_has_family(family_id)
         )
     );
@@ -377,7 +531,13 @@ CREATE POLICY "Children delete policy" ON public.children
 DROP POLICY IF EXISTS "Point rules select policy" ON public.point_rules;
 CREATE POLICY "Point rules select policy" ON public.point_rules
     FOR SELECT
-    USING (true);
+    USING (
+        public.is_admin()
+        OR target_stage_id IS NULL
+        OR public.servant_has_stage(target_stage_id)
+        OR auth.role() = 'anon'
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'display')
+    );
 
 DROP POLICY IF EXISTS "Point rules admin manage policy" ON public.point_rules;
 CREATE POLICY "Point rules admin manage policy" ON public.point_rules
@@ -389,7 +549,12 @@ CREATE POLICY "Point rules admin manage policy" ON public.point_rules
 DROP POLICY IF EXISTS "Point logs select policy" ON public.point_logs;
 CREATE POLICY "Point logs select policy" ON public.point_logs
     FOR SELECT
-    USING (true);
+    USING (
+        public.is_admin() 
+        OR public.servant_has_stage(stage_id)
+        OR auth.role() = 'anon'
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'display')
+    );
 
 DROP POLICY IF EXISTS "Point logs insert policy" ON public.point_logs;
 CREATE POLICY "Point logs insert policy" ON public.point_logs
@@ -398,7 +563,7 @@ CREATE POLICY "Point logs insert policy" ON public.point_logs
         public.is_admin() OR (
             public.is_approved_user() 
             AND servant_id = auth.uid()
-            AND child_id IS NOT NULL
+            AND public.servant_has_stage(stage_id)
             AND public.servant_has_family(family_id)
         )
     );
@@ -410,11 +575,13 @@ CREATE POLICY "Point logs update policy (revert)" ON public.point_logs
         public.is_admin() OR (
             servant_id = auth.uid() 
             AND is_reverted = false
+            AND public.servant_has_stage(stage_id)
         )
     )
     WITH CHECK (
         public.is_admin() OR (
             servant_id = auth.uid()
+            AND public.servant_has_stage(stage_id)
         )
     );
 
@@ -423,8 +590,7 @@ CREATE POLICY "Point logs delete policy" ON public.point_logs
     FOR DELETE
     USING (public.is_admin());
 
--- 14. REALTIME CONFIGURATION (FULL REPLICA IDENTITY & 7 TABLES PUBLICATION)
--- ضبط REPLICA IDENTITY FULL لضمان إرسال كامل البيانات السابقة والجديدة في UPDATE و DELETE
+-- 14. REALTIME CONFIGURATION (FULL REPLICA IDENTITY & TABLES PUBLICATION)
 ALTER TABLE public.children REPLICA IDENTITY FULL;
 ALTER TABLE public.families REPLICA IDENTITY FULL;
 ALTER TABLE public.stages REPLICA IDENTITY FULL;
@@ -432,8 +598,10 @@ ALTER TABLE public.point_logs REPLICA IDENTITY FULL;
 ALTER TABLE public.profiles REPLICA IDENTITY FULL;
 ALTER TABLE public.family_servants REPLICA IDENTITY FULL;
 ALTER TABLE public.point_rules REPLICA IDENTITY FULL;
+ALTER TABLE public.groups REPLICA IDENTITY FULL;
+ALTER TABLE public.group_stages REPLICA IDENTITY FULL;
+ALTER TABLE public.group_servants REPLICA IDENTITY FULL;
 
--- إتاحة الاستماع الفوري لكل الجداول الـ 7 في منشور supabase_realtime
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.children; EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.families; EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.stages; EXCEPTION WHEN duplicate_object THEN null; END $$;
@@ -441,6 +609,9 @@ DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.point_logs; EXC
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.profiles; EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.family_servants; EXCEPTION WHEN duplicate_object THEN null; END $$;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.point_rules; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.groups; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.group_stages; EXCEPTION WHEN duplicate_object THEN null; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.group_servants; EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 -- 15. STORAGE BUCKET FOR PHOTOS
 INSERT INTO storage.buckets (id, name, public) 
@@ -476,12 +647,20 @@ CREATE POLICY "Users can delete media" ON storage.objects
 -- 16. SEED DATA (البيانات الابتدائية)
 -- ==============================================================================
 
--- إضافة المراحل الثلاث المطلوبة (1 ابتدائي، 2 ابتدائي، 3 ابتدائي)
+-- إضافة المراحل الثلاث الأساسية المطلوبة: ابتدائي، إعدادي، ثانوي
 INSERT INTO public.stages (name, sort_order, is_active)
 VALUES 
-    ('1 ابتدائي', 1, true),
-    ('2 ابتدائي', 2, true),
-    ('3 ابتدائي', 3, true)
+    ('ابتدائي', 1, true),
+    ('إعدادي', 2, true),
+    ('ثانوي', 3, true)
+ON CONFLICT (name) DO UPDATE SET is_active = true;
+
+-- إنشاء المجموعات الافتراضية
+INSERT INTO public.groups (name, description, is_active)
+VALUES 
+    ('مجموعة ابتدائي', 'خدمة مرحلة ابتدائي', true),
+    ('مجموعة إعدادي', 'خدمة مرحلة إعدادي', true),
+    ('مجموعة ثانوي', 'خدمة مرحلة ثانوي', true)
 ON CONFLICT (name) DO NOTHING;
 
 -- إضافة قواعد النقاط الابتدائية الـ 9 المذكورة في المواصفات

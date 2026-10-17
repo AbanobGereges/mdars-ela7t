@@ -177,7 +177,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange, isDispl
                 }`}
               >
                 <Layers size={14} />
-                المراحل
+                المراحل والمجموعات
               </button>
               <button
                 onClick={() => onTabChange('families')}
@@ -305,7 +305,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentTab, onTabChange, isDispl
             {[
               { id: 'dashboard', label: 'الرئيسية', icon: Sparkles },
               { id: 'users', label: 'المستخدمين', icon: UserCheck },
-              { id: 'stages', label: 'المراحل', icon: Layers },
+              { id: 'stages', label: 'المراحل والمجموعات', icon: Layers },
               { id: 'families', label: 'الأسر', icon: Home },
               { id: 'children', label: 'الأولاد', icon: Users },
               { id: 'rules', label: 'قواعد النقاط', icon: Award },

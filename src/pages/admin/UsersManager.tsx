@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Profile, UserRole, Family, FamilyServant } from '../../types/database';
+import { Profile, UserRole, Family, FamilyServant, Group, GroupServant, GroupStage } from '../../types/database';
 import {
   UserCheck,
   Shield,
@@ -12,35 +12,52 @@ import {
   UserX,
   Sparkles,
   Users,
-  AlertCircle
+  AlertCircle,
+  FolderKanban,
+  Check
 } from 'lucide-react';
 
 export const UsersManager: React.FC = () => {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [families, setFamilies] = useState<Family[]>([]);
   const [familyServants, setFamilyServants] = useState<FamilyServant[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [groupServants, setGroupServants] = useState<GroupServant[]>([]);
+  const [groupStages, setGroupStages] = useState<GroupStage[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
 
-  // Modal states
+  // Family Modal states
   const [selectedServantForFamilies, setSelectedServantForFamilies] = useState<Profile | null>(null);
   const [assignedFamIds, setAssignedFamIds] = useState<string[]>([]);
   const [savingFamilies, setSavingFamilies] = useState<boolean>(false);
+
+  // Group Modal states
+  const [selectedServantForGroups, setSelectedServantForGroups] = useState<Profile | null>(null);
+  const [assignedGroupIds, setAssignedGroupIds] = useState<string[]>([]);
+  const [savingGroups, setSavingGroups] = useState<boolean>(false);
+
   const [actionError, setActionError] = useState<string | null>(null);
 
   const fetchUsersData = async () => {
     setLoading(true);
     try {
-      const [profRes, famRes, fsRes] = await Promise.all([
+      const [profRes, famRes, fsRes, grpRes, gsRes, gstgRes] = await Promise.all([
         supabase.from('profiles').select('*').order('created_at', { ascending: false }),
         supabase.from('families').select('*, stage:stages(*)').order('name'),
         supabase.from('family_servants').select('*'),
+        supabase.from('groups').select('*').order('name'),
+        supabase.from('group_servants').select('*'),
+        supabase.from('group_stages').select('*, stage:stages(*)'),
       ]);
 
       if (profRes.data) setProfiles(profRes.data as Profile[]);
       if (famRes.data) setFamilies(famRes.data as Family[]);
       if (fsRes.data) setFamilyServants(fsRes.data as FamilyServant[]);
+      if (grpRes.data) setGroups(grpRes.data as Group[]);
+      if (gsRes.data) setGroupServants(gsRes.data as GroupServant[]);
+      if (gstgRes.data) setGroupStages(gstgRes.data as unknown as GroupStage[]);
     } catch (err) {
       console.error('Error fetching users:', err);
     } finally {
@@ -150,6 +167,51 @@ export const UsersManager: React.FC = () => {
     }
   };
 
+  const openGroupAssignmentModal = (servant: Profile) => {
+    const currentAssigned = groupServants
+      .filter((gs) => gs.servant_id === servant.id)
+      .map((gs) => gs.group_id);
+    setSelectedServantForGroups(servant);
+    setAssignedGroupIds(currentAssigned);
+  };
+
+  const handleSaveGroupAssignments = async () => {
+    if (!selectedServantForGroups) return;
+    setSavingGroups(true);
+    setActionError(null);
+
+    try {
+      await supabase
+        .from('group_servants')
+        .delete()
+        .eq('servant_id', selectedServantForGroups.id);
+
+      if (assignedGroupIds.length > 0) {
+        const rowsToInsert = assignedGroupIds.map((gId) => ({
+          servant_id: selectedServantForGroups.id,
+          group_id: gId,
+        }));
+        const { error } = await supabase.from('group_servants').insert(rowsToInsert);
+        if (error) throw error;
+      }
+
+      await fetchUsersData();
+      setSelectedServantForGroups(null);
+    } catch (err: unknown) {
+      setActionError(err instanceof Error ? err.message : 'فشل حفظ تخصيص المجموعات');
+    } finally {
+      setSavingGroups(false);
+    }
+  };
+
+  const toggleGroupSelection = (groupId: string) => {
+    if (assignedGroupIds.includes(groupId)) {
+      setAssignedGroupIds((prev) => prev.filter((id) => id !== groupId));
+    } else {
+      setAssignedGroupIds((prev) => [...prev, groupId]);
+    }
+  };
+
   const filteredProfiles = profiles.filter((p) => {
     if (roleFilter !== 'all' && p.role !== roleFilter) return false;
     if (searchQuery.trim()) {
@@ -238,6 +300,7 @@ export const UsersManager: React.FC = () => {
                   <th className="py-4 px-6">المستخدم</th>
                   <th className="py-4 px-4">البريد الإلكتروني</th>
                   <th className="py-4 px-4">الصلاحية (Role)</th>
+                  <th className="py-4 px-4">المجموعات المخصصة</th>
                   <th className="py-4 px-4">الأسر المخصصة</th>
                   <th className="py-4 px-4">حالة الاعتماد</th>
                   <th className="py-4 px-6 text-center">إجراءات</th>
@@ -246,6 +309,10 @@ export const UsersManager: React.FC = () => {
               <tbody className="divide-y divide-church-100 font-medium">
                 {filteredProfiles.map((p) => {
                   const assignedCount = familyServants.filter((fs) => fs.servant_id === p.id).length;
+                  const assignedUserGroupIds = groupServants
+                    .filter((gs) => gs.servant_id === p.id)
+                    .map((gs) => gs.group_id);
+                  const assignedUserGroups = groups.filter((g) => assignedUserGroupIds.includes(g.id));
 
                   return (
                     <tr key={p.id} className="hover:bg-church-50/40 transition-colors">
@@ -278,6 +345,38 @@ export const UsersManager: React.FC = () => {
                           <option value="servant">🙋 Servant (خادم)</option>
                           <option value="display">🖥️ Display (شاشة عرض)</option>
                         </select>
+                      </td>
+
+                      {/* Assigned Groups */}
+                      <td className="py-4 px-4">
+                        {p.role === 'servant' ? (
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {assignedUserGroups.map((grp) => (
+                              <span
+                                key={grp.id}
+                                className={`text-[10px] font-black px-2 py-0.5 rounded-lg border ${
+                                  grp.is_active
+                                    ? 'bg-church-100 text-church-900 border-church-300'
+                                    : 'bg-slate-100 text-slate-500 border-slate-300'
+                                }`}
+                              >
+                                {grp.name}
+                              </span>
+                            ))}
+                            <button
+                              onClick={() => openGroupAssignmentModal(p)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-church-50 hover:bg-church-100 text-church-800 font-bold text-[11px] transition-all border border-church-200"
+                              title="تخصيص المجموعات والمراحل لهذا الخادم"
+                            >
+                              <FolderKanban size={12} />
+                              <span>{assignedUserGroups.length > 0 ? 'تعديل' : 'تخصيص مجموعة...'}</span>
+                            </button>
+                          </div>
+                        ) : p.role === 'admin' ? (
+                          <span className="text-slate-400 text-[11px]">كل المجموعات</span>
+                        ) : (
+                          <span className="text-slate-400 text-[11px]">شاشة عرض فقط</span>
+                        )}
                       </td>
 
                       {/* Assigned Families */}
@@ -329,6 +428,103 @@ export const UsersManager: React.FC = () => {
                 })}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Group Assignment Modal */}
+      {selectedServantForGroups && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-church-200 overflow-hidden flex flex-col max-h-[85vh]">
+            <div className="bg-gradient-to-r from-church-800 to-church-900 text-white p-5 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-black flex items-center gap-2">
+                  <FolderKanban size={18} />
+                  <span>تخصيص المجموعات للخادم</span>
+                </h3>
+                <p className="text-xs text-church-200 mt-0.5 font-medium">
+                  {selectedServantForGroups.full_name} ({selectedServantForGroups.email})
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedServantForGroups(null)}
+                className="p-1.5 rounded-full hover:bg-white/10 text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 bg-church-50 border-b border-church-200 text-xs text-slate-600 font-medium">
+              اختر المجموعة أو المجموعات المصرح لهذا الخادم بالعمل فيها. سيرى الخادم فقط مراحل وأولاد هذه المجموعات:
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {groups.length === 0 ? (
+                <p className="text-center text-slate-400 py-6 text-xs">لا توجد مجموعات منشأة بالنظام بعد</p>
+              ) : (
+                groups.map((grp) => {
+                  const isChecked = assignedGroupIds.includes(grp.id);
+                  const linkedStages = groupStages
+                    .filter((gs) => gs.group_id === grp.id && gs.stage)
+                    .map((gs) => gs.stage?.name);
+
+                  return (
+                    <label
+                      key={grp.id}
+                      onClick={() => toggleGroupSelection(grp.id)}
+                      className={`w-full p-3.5 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
+                        isChecked
+                          ? 'bg-church-100/90 border-church-600 shadow-xs'
+                          : 'bg-white hover:bg-church-50/60 border-church-200'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-church-200 flex items-center justify-center font-bold text-church-900">
+                          <FolderKanban size={18} />
+                        </div>
+                        <div>
+                          <div className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
+                            <span>{grp.name}</span>
+                            {!grp.is_active && (
+                              <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 rounded">
+                                متوقفة
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 mt-0.5">
+                            المراحل:{' '}
+                            {linkedStages.length > 0 ? linkedStages.join('، ') : 'بدون مراحل'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        readOnly
+                        className="w-5 h-5 rounded-lg text-church-600 border-church-300 focus:ring-church-500 cursor-pointer"
+                      />
+                    </label>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="p-4 bg-church-50 border-t border-church-200 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setSelectedServantForGroups(null)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-200"
+              >
+                إلغاء
+              </button>
+              <button
+                disabled={savingGroups}
+                onClick={handleSaveGroupAssignments}
+                className="px-6 py-2 rounded-xl text-xs font-black bg-church-600 hover:bg-church-700 text-white shadow-md transition-all active:scale-95 disabled:opacity-50"
+              >
+                {savingGroups ? 'جاري الحفظ...' : 'حفظ المجموعات'}
+              </button>
+            </div>
           </div>
         </div>
       )}

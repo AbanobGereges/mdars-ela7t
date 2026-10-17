@@ -8,7 +8,7 @@ import { DisplayView } from './pages/display/DisplayView';
 // Admin Pages
 import { AdminDashboard } from './pages/admin/AdminDashboard';
 import { UsersManager } from './pages/admin/UsersManager';
-import { StagesManager } from './pages/admin/StagesManager';
+import { StagesAndGroupsManager } from './pages/admin/StagesAndGroupsManager';
 import { FamiliesManager } from './pages/admin/FamiliesManager';
 import { ChildrenManager } from './pages/admin/ChildrenManager';
 import { PointRulesManager } from './pages/admin/PointRulesManager';
@@ -75,7 +75,7 @@ export const App: React.FC = () => {
         <main className="flex-1">
           {currentTab === 'dashboard' && <AdminDashboard onNavigateTab={setCurrentTab} />}
           {currentTab === 'users' && <UsersManager />}
-          {currentTab === 'stages' && <StagesManager />}
+          {currentTab === 'stages' && <StagesAndGroupsManager />}
           {currentTab === 'families' && <FamiliesManager />}
           {currentTab === 'children' && <ChildrenManager />}
           {currentTab === 'rules' && <PointRulesManager />}

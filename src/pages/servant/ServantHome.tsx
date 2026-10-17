@@ -18,10 +18,13 @@ import {
 } from 'lucide-react';
 
 export const ServantHome: React.FC = () => {
-  const { profile, assignedFamilies, role, refreshProfile } = useAuth();
+  const { profile, assignedFamilies, assignedGroups, assignedStages, role, refreshProfile } = useAuth();
   const { children, allFamiliesToday, refreshData, loading: pointsLoading } = useRealtimePoints();
 
   const [rules, setRules] = useState<PointRule[]>([]);
+  const [availableStages, setAvailableStages] = useState<Stage[]>([]);
+  const [availableGroups, setAvailableGroups] = useState<Group[]>([]);
+  const [selectedStageFilter, setSelectedStageFilter] = useState<string>('all');
   const [selectedFamilyId, setSelectedFamilyId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeChildForPoints, setActiveChildForPoints] = useState<ChildLeaderboardEntry | null>(null);
@@ -29,27 +32,46 @@ export const ServantHome: React.FC = () => {
   const [targetFamilyForPoints, setTargetFamilyForPoints] = useState<string | null>(null);
   const [refreshingAssignments, setRefreshingAssignments] = useState<boolean>(false);
 
-  // Fetch point rules
+  // Fetch point rules, stages, and groups
   useEffect(() => {
-    const fetchRules = async () => {
-      const { data } = await supabase
-        .from('point_rules')
-        .select('*')
-        .eq('is_active', true)
-        .order('points', { ascending: false });
-      if (data) setRules(data as PointRule[]);
+    const fetchMetadata = async () => {
+      const [rulesRes, stagesRes, groupsRes] = await Promise.all([
+        supabase.from('point_rules').select('*').eq('is_active', true).order('points', { ascending: false }),
+        supabase.from('stages').select('*').eq('is_active', true).order('sort_order'),
+        supabase.from('groups').select('*').eq('is_active', true),
+      ]);
+      if (rulesRes.data) setRules(rulesRes.data as PointRule[]);
+      if (stagesRes.data) setAvailableStages(stagesRes.data as Stage[]);
+      if (groupsRes.data) setAvailableGroups(groupsRes.data as Group[]);
     };
 
-    fetchRules();
+    fetchMetadata();
   }, []);
+
+  // Names of assigned groups
+  const assignedGroupNames = useMemo(() => {
+    if (role === 'admin') return ['كل المجموعات (مدير الخدمة)'];
+    return availableGroups
+      .filter((g) => assignedGroups.includes(g.id))
+      .map((g) => g.name);
+  }, [availableGroups, assignedGroups, role]);
+
+  // Allowed stages for this servant
+  const permittedStagesList = useMemo(() => {
+    if (role === 'admin') return availableStages;
+    return availableStages.filter((s) => assignedStages.includes(s.id));
+  }, [availableStages, assignedStages, role]);
 
   // Permitted families for this servant (or all for admin)
   const permittedFamilyEntries = useMemo(() => {
     return allFamiliesToday.filter((fe) => {
       if (role === 'admin') return true;
-      return assignedFamilies.includes(fe.family.id);
+      // Must be in assigned families AND in allowed stages
+      const isInAssignedFamilies = assignedFamilies.includes(fe.family.id);
+      const isInAllowedStages = assignedStages.includes(fe.family.stage_id);
+      return isInAssignedFamilies && isInAllowedStages;
     });
-  }, [allFamiliesToday, assignedFamilies, role]);
+  }, [allFamiliesToday, assignedFamilies, assignedStages, role]);
 
   const permittedFamilies: Family[] = useMemo(() => {
     return permittedFamilyEntries.map((fe) => fe.family);
@@ -61,19 +83,27 @@ export const ServantHome: React.FC = () => {
     return permittedFamilyEntries.find((fe) => fe.family.id === selectedFamilyId) || null;
   }, [permittedFamilyEntries, selectedFamilyId]);
 
-  // Filter children based on assigned families + selected family tab + search query
+  // Filter children based on assigned stages + assigned families + selected stage tab + selected family tab + search query
   const filteredChildren = useMemo(() => {
     return children.filter((entry) => {
       const child = entry.child;
 
-      // Servant access control: must be in assigned families (unless admin)
-      if (role === 'servant' && assignedFamilies && assignedFamilies.length > 0) {
-        if (!assignedFamilies.includes(child.family_id)) {
+      // Servant access control: must be in assigned stages
+      if (role === 'servant') {
+        if (assignedStages.length > 0 && !assignedStages.includes(child.stage_id)) {
+          return false;
+        }
+        if (assignedFamilies.length > 0 && !assignedFamilies.includes(child.family_id)) {
           return false;
         }
       }
 
-      // Tab filter
+      // Stage filter pill (if servant has multiple stages)
+      if (selectedStageFilter !== 'all' && child.stage_id !== selectedStageFilter) {
+        return false;
+      }
+
+      // Family Tab filter
       if (selectedFamilyId !== 'all' && child.family_id !== selectedFamilyId) {
         return false;
       }
@@ -88,7 +118,7 @@ export const ServantHome: React.FC = () => {
 
       return true;
     });
-  }, [children, role, assignedFamilies, selectedFamilyId, searchQuery]);
+  }, [children, role, assignedStages, assignedFamilies, selectedStageFilter, selectedFamilyId, searchQuery]);
 
   // Handle manual refresh of assignments
   const handleRefreshAssignments = async () => {
@@ -103,16 +133,16 @@ export const ServantHome: React.FC = () => {
     setFamilyPointsModalOpen(true);
   };
 
-  // If servant has no assigned families yet
-  if (role === 'servant' && assignedFamilies.length === 0) {
+  // If servant has no assigned active stages/groups yet
+  if (role === 'servant' && assignedStages.length === 0) {
     return (
       <div className="max-w-3xl mx-auto px-4 py-16 text-center">
         <div className="w-16 h-16 rounded-3xl bg-amber-100 text-amber-800 flex items-center justify-center mx-auto mb-4 border border-amber-300 shadow-sm">
           <AlertTriangle size={32} />
         </div>
-        <h2 className="text-2xl font-black text-slate-800">لم يتم تخصيص أسر لك بعد</h2>
+        <h2 className="text-2xl font-black text-slate-800">لم يتم إسنادك إلى مجموعة خدمة بعد</h2>
         <p className="text-slate-600 mt-2 text-sm max-w-md mx-auto leading-relaxed">
-          أهلاً بك يا خادم المسيح ({profile?.full_name}). يرجى التواصل مع مسؤول الخدمة (الأدمن) لتحديد الأسر الموكلة إليك من شاشة المستخدمين لتتمكن من إضافة النقاط لأولادك.
+          أهلاً بك يا خادم المسيح ({profile?.full_name}). يرجى التواصل مع مسؤول الخدمة (الأدمن) لإضافتك إلى إحدى مجموعات الخدمة (ابتدائي / إعدادي / ثانوي) من لوحة الإدارة حتى تتمكن من الوصول إلى أولادك وتسجيل النقاط.
         </p>
         <button
           onClick={handleRefreshAssignments}
@@ -120,7 +150,7 @@ export const ServantHome: React.FC = () => {
           className="mt-6 px-5 py-2.5 rounded-xl bg-church-600 hover:bg-church-700 text-white text-xs font-bold shadow transition-all inline-flex items-center gap-2"
         >
           <RefreshCw size={14} className={refreshingAssignments ? 'animate-spin' : ''} />
-          <span>{refreshingAssignments ? 'جاري التحقق...' : 'تحديث تعيينات الأسر الآن'}</span>
+          <span>{refreshingAssignments ? 'جاري التحقق...' : 'تحديث تعيينات المجموعات الآن'}</span>
         </button>
       </div>
     );
@@ -131,10 +161,22 @@ export const ServantHome: React.FC = () => {
       {/* Top Banner / Servant Welcome */}
       <div className="bg-gradient-to-r from-church-800 via-church-700 to-church-800 rounded-3xl p-6 text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4 border border-church-600/40">
         <div>
-          <span className="inline-flex items-center gap-1.5 bg-white/20 text-yellow-300 px-3 py-1 rounded-full text-xs font-bold mb-2">
-            <Sparkles size={14} />
-            لوحة الخادم التفاعلية
-          </span>
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="inline-flex items-center gap-1.5 bg-white/20 text-yellow-300 px-3 py-1 rounded-full text-xs font-bold">
+              <Sparkles size={14} />
+              لوحة الخادم التفاعلية
+            </span>
+            {assignedGroupNames.length > 0 && (
+              <span className="inline-flex items-center gap-1 bg-amber-400/20 text-amber-200 border border-amber-400/30 px-3 py-1 rounded-full text-xs font-bold">
+                📁 المجموعة: {assignedGroupNames.join('، ')}
+              </span>
+            )}
+            {permittedStagesList.length > 0 && (
+              <span className="inline-flex items-center gap-1 bg-sky-400/20 text-sky-200 border border-sky-400/30 px-3 py-1 rounded-full text-xs font-bold">
+                🎓 المراحل المصرح بها: {permittedStagesList.map((s) => s.name).join('، ')}
+              </span>
+            )}
+          </div>
           <h1 className="text-2xl sm:text-3xl font-black">أهلاً بك، {profile?.full_name || 'خادم الخدمة'}</h1>
           <p className="text-xs text-church-200 font-medium mt-1">
             سجّل نقاط الأولاد في أسر خدمتك، أو أضف نقاطاً مباشرة للأسرة للتنافس العام اليوم
@@ -158,6 +200,36 @@ export const ServantHome: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Stage Filter if Servant has access to multiple stages */}
+      {permittedStagesList.length > 1 && (
+        <div className="bg-white p-3.5 rounded-2xl border border-church-200/90 shadow-xs flex items-center gap-2 overflow-x-auto">
+          <span className="text-xs font-bold text-slate-500 shrink-0 ml-1">تصفية حسب المرحلة:</span>
+          <button
+            onClick={() => setSelectedStageFilter('all')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+              selectedStageFilter === 'all'
+                ? 'bg-church-600 text-white shadow-xs'
+                : 'bg-church-50 text-church-900 hover:bg-church-100'
+            }`}
+          >
+            جميع المراحل المتاحة ({permittedStagesList.length})
+          </button>
+          {permittedStagesList.map((stg) => (
+            <button
+              key={stg.id}
+              onClick={() => setSelectedStageFilter(stg.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all ${
+                selectedStageFilter === stg.id
+                  ? 'bg-church-600 text-white shadow-xs'
+                  : 'bg-church-50 text-church-900 hover:bg-church-100'
+              }`}
+            >
+              {stg.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Families Overview & Points Breakdown Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
