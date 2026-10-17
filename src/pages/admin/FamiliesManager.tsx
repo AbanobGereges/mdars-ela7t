@@ -127,6 +127,7 @@ export const FamiliesManager: React.FC = () => {
 
     try {
       if (editingFamily) {
+        const stageChanged = editingFamily.stage_id !== selectedStageId;
         const { error } = await supabase
           .from('families')
           .update({
@@ -137,6 +138,15 @@ export const FamiliesManager: React.FC = () => {
           .eq('id', editingFamily.id);
 
         if (error) throw error;
+
+        // Cascade stage update to all linked children if family stage was changed
+        if (stageChanged) {
+          const { error: chErr } = await supabase
+            .from('children')
+            .update({ stage_id: selectedStageId })
+            .eq('family_id', editingFamily.id);
+          if (chErr) console.warn('Child stage auto-sync error:', chErr);
+        }
       } else {
         const { error } = await supabase.from('families').insert({
           name: familyName.trim(),
@@ -323,26 +333,27 @@ export const FamiliesManager: React.FC = () => {
                     </button>
                   </div>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5">
                     <button
                       onClick={() => handleToggleActive(fam)}
-                      className="text-xs font-semibold text-slate-500 hover:text-church-800 px-2 py-1"
+                      className="text-xs font-semibold text-slate-500 hover:text-church-800 px-2 py-1 rounded-lg hover:bg-slate-50"
                     >
                       {fam.is_active ? 'تعطيل' : 'تفعيل'}
                     </button>
                     <button
                       onClick={() => openEditModal(fam)}
-                      className="p-1.5 text-church-600 hover:bg-church-50 rounded-xl"
-                      title="تعديل"
+                      className="px-2.5 py-1.5 text-xs font-bold text-church-900 bg-church-50 hover:bg-church-100 border border-church-200 rounded-xl flex items-center gap-1 transition-all active:scale-95 shadow-2xs"
+                      title="تعديل اسم أو مرحلة الأسرة"
                     >
-                      <Edit2 size={16} />
+                      <Edit2 size={13} />
+                      <span>تعديل</span>
                     </button>
                     <button
                       onClick={() => handleDeleteFamily(fam)}
-                      className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-xl"
-                      title="حذف"
+                      className="px-2 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 rounded-xl transition-all"
+                      title="حذف الأسرة"
                     >
-                      <Trash2 size={16} />
+                      حذف
                     </button>
                   </div>
                 </div>
@@ -401,6 +412,17 @@ export const FamiliesManager: React.FC = () => {
                   ))}
                 </select>
               </div>
+
+              {editingFamily && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-[11px] text-amber-900 leading-relaxed">
+                  <span className="font-bold block mb-0.5">💡 معلومة:</span>
+                  <span>
+                    يوجد حالياً{' '}
+                    <b>({children.filter((c) => c.family_id === editingFamily.id).length})</b> أولاد مسجلين بهذه
+                    الأسرة. في حال تغيير المرحلة، سيتم نقل جميع الأولاد تلقائياً للمرحلة الجديدة.
+                  </span>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">صورة / شعار الأسرة:</label>

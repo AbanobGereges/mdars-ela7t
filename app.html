@@ -3682,27 +3682,61 @@
     }
 
     // 7.4 FAMILIES MANAGER TAB
+    var editingFamilyId = null;
+
     function renderAdminFamilies(stats) {
       const currentStats = stats || computeTodayStats();
+      const editFam = editingFamilyId ? cacheFamilies.find(f => f.id === editingFamilyId) : null;
+
       return `
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <!-- Add Family Form -->
-          <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
-            <h3 class="font-black text-sm text-slate-900">➕ إضافة أسرة جديدة</h3>
-            <form onsubmit="handleCreateFamily(event)" class="space-y-3 text-right">
+          <!-- Add or Edit Family Form -->
+          <div class="bg-white rounded-3xl p-6 border ${editFam ? 'border-amber-400 ring-2 ring-amber-300/40 bg-amber-50/20' : 'border-church-200'} shadow-sm space-y-4">
+            <div class="flex items-center justify-between border-b border-church-100 pb-2">
+              <h3 class="font-black text-sm text-slate-900 flex items-center gap-1.5">
+                <span>${editFam ? '✏️' : '➕'}</span>
+                <span>${editFam ? 'تعديل بيانات الأسرة' : 'إضافة أسرة جديدة'}</span>
+              </h3>
+              ${editFam ? `
+                <span class="text-[10px] text-amber-900 bg-amber-100 border border-amber-300 px-2 py-0.5 rounded-md font-bold">
+                  وضع التعديل
+                </span>
+              ` : ''}
+            </div>
+
+            <form onsubmit="handleSaveFamilyForm(event, '${editFam ? editFam.id : ''}')" class="space-y-3 text-right">
               <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1">اسم الأسرة:</label>
-                <input id="fam-name" type="text" required placeholder="مثال: أسرة النور" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500" />
+                <input id="fam-name" type="text" required value="${editFam ? editFam.name : ''}" placeholder="مثال: أسرة النور" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500 font-bold" />
               </div>
               <div>
                 <label class="block text-xs font-bold text-slate-700 mb-1">المرحلة التابعة لها:</label>
-                <select id="fam-stage" required class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500 bg-white">
-                  ${cacheStages.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                <select id="fam-stage" required class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500 bg-white font-bold text-slate-800">
+                  ${cacheStages.map(s => `
+                    <option value="${s.id}" ${editFam && editFam.stage_id === s.id ? 'selected' : ''}>
+                      ${s.name}
+                    </option>
+                  `).join('')}
                 </select>
               </div>
-              <button type="submit" class="w-full py-2.5 rounded-xl bg-church-600 hover:bg-church-700 text-white font-bold text-xs shadow-md">
-                حفظ الأسرة
-              </button>
+
+              ${editFam ? `
+                <div class="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-900">
+                  <span>ℹ️ عند تعديل مرحلة الأسرة، سيتم تلقائياً تحديث مرحلة جميع الأولاد المسجلين بها.</span>
+                </div>
+                <div class="flex items-center gap-2 pt-1">
+                  <button type="submit" id="btn-submit-fam" class="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-md transition-all active:scale-95">
+                    💾 حفظ التعديلات
+                  </button>
+                  <button type="button" onclick="cancelEditFamily()" class="px-3 py-2.5 rounded-xl border border-slate-300 text-slate-600 font-bold text-xs hover:bg-slate-100 transition-all">
+                    إلغاء
+                  </button>
+                </div>
+              ` : `
+                <button type="submit" id="btn-submit-fam" class="w-full py-2.5 rounded-xl bg-church-600 hover:bg-church-700 text-white font-bold text-xs shadow-md transition-all active:scale-95">
+                  حفظ الأسرة
+                </button>
+              `}
             </form>
           </div>
 
@@ -3711,7 +3745,7 @@
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-church-100 pb-3">
               <div>
                 <h3 class="font-black text-sm text-slate-900">الأسر المسجلة (${cacheFamilies.length})</h3>
-                <p class="text-[10px] text-slate-500">إجمالي ومتابعة نقاط الأسر وإمكانية تسجيل نقاط مباشرة</p>
+                <p class="text-[10px] text-slate-500">إجمالي ومتابعة وتعديل بيانات الأسر وإمكانية تسجيل نقاط مباشرة</p>
               </div>
               <button onclick="openFamilyPointModal()" class="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5 shrink-0">
                 <span>⭐ إضافة نقاط للأسرة</span>
@@ -3724,13 +3758,17 @@
                 const famEntry = (currentStats?.familiesWithPoints || []).find(item => item.family.id === f.id);
                 const ptsToday = famEntry ? famEntry.pointsToday : 0;
                 const ptsTotal = famEntry ? famEntry.pointsTotal : 0;
+                const isBeingEdited = editingFamilyId === f.id;
 
                 return `
-                  <div class="p-4 rounded-2xl border border-church-200 bg-church-50/40 flex flex-col justify-between gap-3">
+                  <div class="p-4 rounded-2xl border ${isBeingEdited ? 'border-amber-400 bg-amber-50/70 ring-2 ring-amber-300/40' : 'border-church-200 bg-church-50/40'} flex flex-col justify-between gap-3 transition-all">
                     <div class="flex items-start justify-between">
                       <div>
-                        <h4 class="font-black text-sm text-slate-900">${f.name}</h4>
-                        <span class="text-[11px] text-church-700 font-bold block">📚 ${f.stage?.name || ''} • ${kidCount} أولاد</span>
+                        <div class="flex items-center gap-1.5">
+                          <h4 class="font-black text-sm text-slate-900">${f.name}</h4>
+                          ${isBeingEdited ? '<span class="text-[9px] font-black bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded">قيد التعديل</span>' : ''}
+                        </div>
+                        <span class="text-[11px] text-church-700 font-bold block mt-0.5">📚 ${f.stage?.name || ''} • ${kidCount} أولاد</span>
                       </div>
                       <div class="text-left">
                         <span class="text-[10px] text-slate-500 block">نقاط اليوم: <b class="${ptsToday > 0 ? 'text-emerald-600' : 'text-slate-700'}">${ptsToday > 0 ? '+' + ptsToday : ptsToday}</b></span>
@@ -3739,8 +3777,12 @@
                     </div>
 
                     <div class="flex items-center justify-end gap-1.5 border-t border-church-100 pt-2.5">
-                      <button onclick="openFamilyPointModal('${f.id}')" title="إضافة نقاط مباشرة لهذه الأسرة" class="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs shadow-2xs transition-all active:scale-95 flex items-center gap-1">
-                        <span>⭐ إضافة نقاط</span>
+                      <button onclick="openFamilyPointModal('${f.id}')" title="إضافة نقاط مباشرة لهذه الأسرة" class="px-2.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-black text-xs shadow-2xs transition-all active:scale-95 flex items-center gap-1">
+                        <span>⭐ نقاط</span>
+                      </button>
+                      <button onclick="openEditFamilyModal('${f.id}')" title="تعديل اسم أو مرحلة الأسرة" class="px-2.5 py-1.5 rounded-xl border border-church-300 bg-white hover:bg-church-100 text-church-900 font-bold text-[11px] flex items-center gap-1 transition-all active:scale-95 shadow-2xs">
+                        <span>✏️</span>
+                        <span>تعديل</span>
                       </button>
                       <button onclick="handleDeleteFamily('${f.id}', ${kidCount})" class="px-2.5 py-1.5 rounded-xl border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold text-[11px]">
                         حذف
@@ -3755,19 +3797,182 @@
       `;
     }
 
-    async function handleCreateFamily(e) {
+    function startEditFamily(famId) {
+      editingFamilyId = famId;
+      renderAdminDashboard();
+      const el = document.getElementById('fam-name');
+      if (el) {
+        el.focus();
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    function cancelEditFamily() {
+      editingFamilyId = null;
+      renderAdminDashboard();
+    }
+
+    // Modal popup to edit family directly from anywhere
+    function openEditFamilyModal(famId) {
+      const fam = cacheFamilies.find(f => f.id === famId);
+      if (!fam) return;
+
+      const kidCount = cacheChildren.filter(c => c.family_id === fam.id).length;
+
+      const modal = document.createElement('div');
+      modal.id = 'modal-edit-family-box';
+      modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150';
+      modal.innerHTML = `
+        <div class="bg-white w-full max-w-md rounded-3xl p-6 border border-church-200 shadow-2xl space-y-4 text-right">
+          <!-- Modal Header -->
+          <div class="flex items-center justify-between border-b border-church-100 pb-3">
+            <h3 class="font-black text-base text-slate-900 flex items-center gap-2">
+              <span>✏️</span>
+              <span>تعديل بيانات الأسرة</span>
+            </h3>
+            <button onclick="document.getElementById('modal-edit-family-box').remove()" class="text-slate-400 hover:text-slate-600 font-bold p-1 rounded-full text-lg">✕</button>
+          </div>
+
+          <form onsubmit="handleSaveEditFamilyModal(event, '${fam.id}')" class="space-y-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">اسم الأسرة <span class="text-rose-500">*</span>:</label>
+              <input id="modal-edit-fam-name" type="text" required value="${fam.name}" placeholder="اسم الأسرة" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500 font-bold text-slate-900" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">المرحلة الدراسية التابعة لها <span class="text-rose-500">*</span>:</label>
+              <select id="modal-edit-fam-stage" required class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500 bg-white font-bold text-slate-800">
+                ${cacheStages.map(s => `
+                  <option value="${s.id}" ${s.id === fam.stage_id ? 'selected' : ''}>
+                    ${s.name}
+                  </option>
+                `).join('')}
+              </select>
+            </div>
+
+            <div class="p-3 bg-amber-50 border border-amber-200 rounded-2xl text-[11px] text-amber-900 leading-relaxed">
+              <span class="font-bold block mb-0.5">💡 معلومة هامة:</span>
+              <span>يوجد حالياً <b>(${kidCount})</b> أطفال مسجلين بهذه الأسرة. في حال تغيير المرحلة، سيتم نقل جميع الأطفال التابعين لهذه الأسرة تلقائياً للمرحلة الجديدة للحفاظ على تكامل البيانات وشاشات العرض.</span>
+            </div>
+
+            <div class="flex items-center gap-2 pt-2 border-t border-church-100">
+              <button type="submit" id="modal-btn-save-fam" class="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-black text-xs shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5">
+                <span>💾</span>
+                <span>حفظ التعديلات</span>
+              </button>
+              <button type="button" onclick="document.getElementById('modal-edit-family-box').remove()" class="px-4 py-2.5 rounded-xl border border-slate-300 text-slate-600 font-bold text-xs hover:bg-slate-100 transition-all">
+                إلغاء
+              </button>
+            </div>
+          </form>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      const inputEl = document.getElementById('modal-edit-fam-name');
+      if (inputEl) inputEl.focus();
+    }
+
+    async function handleSaveEditFamilyModal(e, famId) {
       e.preventDefault();
-      const name = document.getElementById('fam-name').value.trim();
-      const stage_id = document.getElementById('fam-stage').value;
+      const name = document.getElementById('modal-edit-fam-name').value.trim();
+      const stage_id = document.getElementById('modal-edit-fam-stage').value;
+      if (!name || !stage_id) return;
+
+      const btn = document.getElementById('modal-btn-save-fam');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = 'جاري حفظ التعديلات...';
+      }
 
       try {
-        const { error } = await supabaseClient.from('families').insert({ name, stage_id });
-        if (error) throw error;
+        const existing = cacheFamilies.find(f => f.id === famId);
+        const stageChanged = existing && existing.stage_id !== stage_id;
+
+        // 1. Update family
+        const { error: famErr } = await supabaseClient
+          .from('families')
+          .update({ name, stage_id })
+          .eq('id', famId);
+        if (famErr) throw famErr;
+
+        // 2. If stage changed, automatically update all children in this family
+        if (stageChanged) {
+          const { error: chErr } = await supabaseClient
+            .from('children')
+            .update({ stage_id })
+            .eq('family_id', famId);
+          if (chErr) console.warn('Child stage auto-sync note:', chErr);
+        }
+
+        const modal = document.getElementById('modal-edit-family-box');
+        if (modal) modal.remove();
+
+        editingFamilyId = null;
+        showToast(`✓ تم تحديث بيانات أسرة (${name}) بنجاح!`, true);
         await loadAllData();
         renderAdminDashboard();
       } catch (err) {
-        alert(err.message || 'فشل إنشاء الأسرة');
+        alert(err.message || 'فشل تحديث بيانات الأسرة');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerText = '💾 حفظ التعديلات';
+        }
       }
+    }
+
+    async function handleSaveFamilyForm(e, famId) {
+      e.preventDefault();
+      const name = document.getElementById('fam-name').value.trim();
+      const stage_id = document.getElementById('fam-stage').value;
+      if (!name || !stage_id) return;
+
+      const btn = document.getElementById('btn-submit-fam');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = 'جاري الحفظ...';
+      }
+
+      try {
+        if (famId) {
+          // Edit existing family
+          const existing = cacheFamilies.find(f => f.id === famId);
+          const stageChanged = existing && existing.stage_id !== stage_id;
+
+          const { error: famErr } = await supabaseClient
+            .from('families')
+            .update({ name, stage_id })
+            .eq('id', famId);
+          if (famErr) throw famErr;
+
+          if (stageChanged) {
+            await supabaseClient
+              .from('children')
+              .update({ stage_id })
+              .eq('family_id', famId);
+          }
+
+          editingFamilyId = null;
+          showToast(`✓ تم تعديل بيانات أسرة (${name}) بنجاح!`, true);
+        } else {
+          // Create new family
+          const { error } = await supabaseClient.from('families').insert({ name, stage_id });
+          if (error) throw error;
+          showToast(`✓ تم إنشاء أسرة (${name}) بنجاح!`, true);
+        }
+
+        await loadAllData();
+        renderAdminDashboard();
+      } catch (err) {
+        alert(err.message || 'فشل حفظ بيانات الأسرة');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerText = famId ? '💾 حفظ التعديلات' : 'حفظ الأسرة';
+        }
+      }
+    }
+
+    async function handleCreateFamily(e) {
+      return handleSaveFamilyForm(e, null);
     }
 
     async function handleDeleteFamily(famId, kidCount) {
