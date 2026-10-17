@@ -133,6 +133,8 @@
     var currentProfile = null;
     var currentRole = null;
     var assignedFamilyIds = [];
+    var assignedGroupIds = [];
+    var assignedStageIds = [];
     var currentAdminTab = 'dashboard'; // 'dashboard' | 'users' | 'stages' | 'families' | 'children' | 'rules' | 'audit'
     var currentServantTab = 'kids'; // 'kids' | 'history'
     var isDisplayOnlyMode = false;
@@ -145,6 +147,9 @@
     var cacheLogs = [];
     var cacheProfiles = [];
     var cacheFamilyServants = [];
+    var cacheGroups = [];
+    var cacheGroupStages = [];
+    var cacheGroupServants = [];
     var realtimeChannel = null;
     var realtimeSyncDebounceTimer = null;
     var isRealtimeConnected = false;
@@ -367,14 +372,27 @@
           currentRole = data.role;
 
           if (currentRole === 'servant') {
-            const { data: fs } = await supabaseClient
-              .from('family_servants')
-              .select('family_id')
-              .eq('servant_id', userId);
-            assignedFamilyIds = fs ? fs.map(item => item.family_id) : [];
+            const [fsRes, gsRes] = await Promise.all([
+              supabaseClient.from('family_servants').select('family_id').eq('servant_id', userId),
+              supabaseClient.from('group_servants').select('group_id').eq('servant_id', userId)
+            ]);
+            assignedFamilyIds = fsRes.data ? fsRes.data.map(item => item.family_id) : [];
+            assignedGroupIds = gsRes.data ? gsRes.data.map(item => item.group_id) : [];
+
+            if (assignedGroupIds.length > 0) {
+              const { data: gstData } = await supabaseClient
+                .from('group_stages')
+                .select('stage_id')
+                .in('group_id', assignedGroupIds);
+              assignedStageIds = gstData ? [...new Set(gstData.map(item => item.stage_id))] : [];
+            } else {
+              assignedStageIds = [];
+            }
           } else if (currentRole === 'admin') {
             const { data: fams } = await supabaseClient.from('families').select('id');
             assignedFamilyIds = fams ? fams.map(f => f.id) : [];
+            assignedStageIds = [];
+            assignedGroupIds = [];
           }
         } else {
           const metaName = (currentUser.user_metadata && currentUser.user_metadata.full_name) || 'مستخدم جديد';
@@ -394,14 +412,17 @@
     async function loadAllData() {
       if (!supabaseClient) return;
       try {
-        const [chRes, famRes, stgRes, ruleRes, logRes, profRes, fsRes] = await Promise.all([
+        const [chRes, famRes, stgRes, ruleRes, logRes, profRes, fsRes, grpRes, gstgRes, gservRes] = await Promise.all([
           supabaseClient.from('children').select('*').order('full_name'),
           supabaseClient.from('families').select('*').order('name'),
           supabaseClient.from('stages').select('*').order('sort_order'),
           supabaseClient.from('point_rules').select('*').order('points', { ascending: false }),
           supabaseClient.from('point_logs').select('*').order('created_at', { ascending: false }),
           supabaseClient.from('profiles').select('*').order('created_at'),
-          supabaseClient.from('family_servants').select('*')
+          supabaseClient.from('family_servants').select('*'),
+          supabaseClient.from('groups').select('*').order('created_at', { ascending: true }),
+          supabaseClient.from('group_stages').select('*'),
+          supabaseClient.from('group_servants').select('*')
         ]);
 
         if (logRes.error) console.error('[loadAllData] point_logs query error:', logRes.error);
@@ -409,6 +430,9 @@
         if (ruleRes.error) console.error('[loadAllData] point_rules query error:', ruleRes.error);
 
         cacheStages = stgRes.data || [];
+        cacheGroups = grpRes.data || [];
+        cacheGroupStages = gstgRes.data || [];
+        cacheGroupServants = gservRes.data || [];
         cacheFamilies = (famRes.data || []).map(f => ({
           ...f,
           stage: cacheStages.find(s => s.id === f.stage_id) || { name: '' }
@@ -834,6 +858,16 @@
         top3FamiliesToday,
         grandTotalToday
       };
+    }
+
+    // Safety fallback: expose stats globally on window so no template or handler ever throws "ReferenceError: stats is not defined"
+    try {
+      Object.defineProperty(window, 'stats', {
+        get: function() { return computeTodayStats(); },
+        configurable: true
+      });
+    } catch (e) {
+      window.stats = null;
     }
 
     // ===========================================================================
@@ -1362,8 +1396,33 @@
       const stats = computeTodayStats();
       const root = document.getElementById('app-root');
 
-      // Filter children for assigned families
-      const myKids = stats.childrenWithPoints.filter(entry => assignedFamilyIds.includes(entry.child.family_id));
+      // Check if servant has no assigned stages or groups
+      if (currentRole === 'servant' && assignedStageIds.length === 0) {
+        root.innerHTML = `
+          <div class="min-h-screen bg-[#fbf7ee] flex flex-col items-center justify-center p-6 text-center">
+            <div class="max-w-md w-full bg-white rounded-3xl p-8 border border-amber-200 shadow-xl space-y-4">
+              <div class="w-16 h-16 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center text-3xl mx-auto">⚠️</div>
+              <h2 class="text-xl font-black text-slate-900">لم يتم إسنادك إلى مجموعة خدمة بعد</h2>
+              <p class="text-xs text-slate-600 leading-relaxed font-medium">
+                أهلاً بك يا خادم المسيح (${currentProfile?.full_name}). يرجى التواصل مع مسؤول الخدمة (الأدمن) لإضافتك إلى إحدى مجموعات الخدمة (ابتدائي / إعدادي / ثانوي) من لوحة الإدارة حتى تتمكن من تسجيل النقاط ومتابعة الأولاد.
+              </p>
+              <button onclick="loadUserProfile(currentUser.id).then(() => renderServantHome())" class="px-5 py-2.5 rounded-xl bg-church-600 text-white font-bold text-xs shadow-md">
+                تحديث التعيينات الآن
+              </button>
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      // Filter children for assigned stages & families
+      const myKids = stats.childrenWithPoints.filter(entry => {
+        if (currentRole === 'servant') {
+          if (assignedStageIds.length > 0 && !assignedStageIds.includes(entry.child.stage_id)) return false;
+          if (assignedFamilyIds.length > 0 && !assignedFamilyIds.includes(entry.child.family_id)) return false;
+        }
+        return true;
+      });
 
       // Servant logs today
       const myLogsToday = cacheLogs.filter(l => l.servant_id === currentUser?.id);
@@ -2393,7 +2452,7 @@
               👥 المستخدمين والخدام (${cacheProfiles.length})
             </button>
             <button onclick="currentAdminTab='stages'; renderAdminDashboard();" class="py-3 border-b-2 shrink-0 ${currentAdminTab==='stages'?'border-church-600 text-church-900':'border-transparent text-slate-500'}">
-              📚 المراحل (${cacheStages.length})
+              📁 المراحل والمجموعات (${cacheGroups.length})
             </button>
             <button onclick="currentAdminTab='families'; renderAdminDashboard();" class="py-3 border-b-2 shrink-0 ${currentAdminTab==='families'?'border-church-600 text-church-900':'border-transparent text-slate-500'}">
               🏠 الأسر (${cacheFamilies.length})
@@ -2427,6 +2486,7 @@
 
     // 7.1 STATS TAB
     function renderAdminDashboardStats(stats) {
+      const currentStats = stats || computeTodayStats();
       return `
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div class="bg-white p-5 rounded-3xl border border-church-200 shadow-sm">
@@ -2443,7 +2503,7 @@
           </div>
           <div class="bg-white p-5 rounded-3xl border border-church-200 shadow-sm">
             <span class="text-xs text-slate-500 font-bold block">نقاط اليوم الكلية</span>
-            <span class="text-3xl font-black text-purple-700 block mt-1">${stats.grandTotalToday}</span>
+            <span class="text-3xl font-black text-purple-700 block mt-1">${currentStats.grandTotalToday}</span>
           </div>
         </div>
 
@@ -2451,8 +2511,8 @@
           <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm">
             <h3 class="font-black text-base text-slate-900 mb-4">🏆 أبطال اليوم (Top 3)</h3>
             <div class="space-y-3">
-              ${stats.top3ChildrenToday.map((entry, i) => {
-                const tied = (stats.childrenWithPoints || []).filter(c => 
+              ${currentStats.top3ChildrenToday.map((entry, i) => {
+                const tied = (currentStats.childrenWithPoints || []).filter(c => 
                   c.child.id !== entry.child.id && 
                   entry.pointsToday > 0 && 
                   c.pointsToday === entry.pointsToday
@@ -2514,6 +2574,7 @@
                   <th class="p-3">البريد الإلكتروني</th>
                   <th class="p-3">الدور (Role)</th>
                   <th class="p-3">الحالة</th>
+                  <th class="p-3">المجموعات المخصصة</th>
                   <th class="p-3">الأسر المخصصة</th>
                   <th class="p-3 text-left">إجراءات</th>
                 </tr>
@@ -2522,6 +2583,10 @@
                 ${cacheProfiles.map(p => {
                   const myFamIds = cacheFamilyServants.filter(fs => fs.servant_id === p.id).map(fs => fs.family_id);
                   const myFamNames = cacheFamilies.filter(f => myFamIds.includes(f.id)).map(f => f.name).join('، ');
+
+                  const myGrpIds = cacheGroupServants.filter(gs => gs.servant_id === p.id).map(gs => gs.group_id);
+                  const myGrps = cacheGroups.filter(g => myGrpIds.includes(g.id));
+                  const myGrpBadges = myGrps.map(g => `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-church-100 text-church-900 font-bold text-[10px] border border-church-300">📁 ${g.name}</span>`).join(' ');
 
                   return `
                     <tr class="hover:bg-church-50/40">
@@ -2544,13 +2609,21 @@
                         `}
                       </td>
                       <td class="p-3 text-slate-600">
+                        ${p.role === 'admin' ? '<span class="text-amber-600 font-bold">جميع المجموعات</span>' : (myGrpBadges || '<span class="text-slate-400">بدون مجموعة</span>')}
+                      </td>
+                      <td class="p-3 text-slate-600">
                         ${p.role === 'admin' ? '<span class="text-amber-600 font-bold">جميع الأسر</span>' : (myFamNames || '<span class="text-slate-400">لا يوجد</span>')}
                       </td>
                       <td class="p-3 text-left">
                         ${p.role === 'servant' ? `
-                          <button onclick="openAssignFamiliesModal('${p.id}', '${p.full_name}')" class="px-2.5 py-1 bg-church-600 text-white rounded-lg font-bold text-[10px] hover:bg-church-700">
-                            تخصيص الأسر
-                          </button>
+                          <div class="flex items-center gap-1.5 justify-end">
+                            <button onclick="openAssignGroupsModal('${p.id}', '${p.full_name}')" class="px-2 py-1 bg-purple-700 text-white rounded-lg font-bold text-[10px] hover:bg-purple-800" title="تخصيص المجموعات">
+                              المجموعات
+                            </button>
+                            <button onclick="openAssignFamiliesModal('${p.id}', '${p.full_name}')" class="px-2 py-1 bg-church-600 text-white rounded-lg font-bold text-[10px] hover:bg-church-700" title="تخصيص الأسر">
+                              الأسر
+                            </button>
+                          </div>
                         ` : ''}
                       </td>
                     </tr>
@@ -2641,52 +2714,495 @@
       }
     }
 
-    // 7.3 STAGES MANAGER TAB
-    function renderAdminStages() {
-      return `
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <!-- Add Stage Form -->
-          <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
-            <h3 class="font-black text-sm text-slate-900">➕ إضافة مرحلة جديدة</h3>
-            <form onsubmit="handleCreateStage(event)" class="space-y-3 text-right">
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">اسم المرحلة:</label>
-                <input id="stg-name" type="text" required placeholder="مثال: 4 ابتدائي" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500" />
-              </div>
-              <div>
-                <label class="block text-xs font-bold text-slate-700 mb-1">ترتيب الظهور:</label>
-                <input id="stg-order" type="number" required value="${cacheStages.length + 1}" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500" />
-              </div>
-              <button type="submit" class="w-full py-2.5 rounded-xl bg-church-600 hover:bg-church-700 text-white font-bold text-xs shadow-md">
-                إضافة المرحلة
-              </button>
-            </form>
+    function openAssignGroupsModal(servantId, servantName) {
+      const currentAssigned = cacheGroupServants.filter(gs => gs.servant_id === servantId).map(gs => gs.group_id);
+
+      const modal = document.createElement('div');
+      modal.id = 'modal-assign-grp-box';
+      modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150';
+      modal.innerHTML = `
+        <div class="bg-white w-full max-w-md rounded-3xl p-6 border border-church-200 shadow-2xl space-y-4 text-right flex flex-col max-h-[85vh]">
+          <div class="flex items-center justify-between border-b border-church-100 pb-3">
+            <div>
+              <h3 class="font-black text-sm text-slate-900">تخصيص المجموعات للخادم: ${servantName}</h3>
+              <p class="text-xs text-slate-500 mt-0.5">اختر المجموعات المصرح لهذا الخادم بالعمل فيها</p>
+            </div>
+            <button onclick="document.getElementById('modal-assign-grp-box').remove()" class="text-slate-400 hover:text-slate-600">✕</button>
           </div>
 
-          <!-- Stages List -->
-          <div class="md:col-span-2 bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
-            <h3 class="font-black text-sm text-slate-900">المراحل الحالية</h3>
-            <div class="divide-y divide-church-100">
-              ${cacheStages.map(s => {
-                const famCount = cacheFamilies.filter(f => f.stage_id === s.id).length;
-                return `
-                  <div class="py-3 flex items-center justify-between text-xs">
-                    <div>
-                      <span class="font-bold text-slate-900 text-sm">${s.name}</span>
-                      <span class="text-slate-400 mr-2">(ترتيب: ${s.sort_order}) • ${famCount} أسر</span>
-                    </div>
-                    <div class="flex items-center gap-2">
-                      <button onclick="handleDeleteStage('${s.id}', ${famCount})" class="px-2.5 py-1 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold text-[11px]">
-                        حذف
-                      </button>
-                    </div>
+          <div class="space-y-2 max-h-60 overflow-y-auto">
+            ${cacheGroups.length === 0 ? `
+              <p class="text-center text-slate-400 py-6 text-xs">لا توجد مجموعات منشأة بعد</p>
+            ` : cacheGroups.map(g => {
+              const linkedStages = cacheGroupStages.filter(gs => gs.group_id === g.id).map(gs => {
+                const s = cacheStages.find(st => st.id === gs.stage_id);
+                return s ? s.name : '';
+              }).filter(Boolean);
+
+              return `
+                <label class="flex items-center justify-between p-3 rounded-2xl border border-church-100 hover:bg-church-50/50 cursor-pointer ${currentAssigned.includes(g.id)?'bg-purple-50/60 border-purple-300':''}">
+                  <div>
+                    <span class="text-xs font-bold text-slate-800 block">📁 ${g.name} ${!g.is_active ? '<span class="text-[10px] text-rose-500">(متوقفة)</span>' : ''}</span>
+                    <span class="text-[10px] text-slate-400 block">المراحل: ${linkedStages.join('، ') || 'بدون مراحل'}</span>
                   </div>
-                `;
-              }).join('')}
+                  <input type="checkbox" value="${g.id}" ${currentAssigned.includes(g.id)?'checked':''} class="grp-serv-check rounded text-purple-600 focus:ring-purple-500 w-4 h-4" />
+                </label>
+              `;
+            }).join('')}
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-3 border-t border-church-100">
+            <button type="button" onclick="document.getElementById('modal-assign-grp-box').remove()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">
+              إلغاء
+            </button>
+            <button onclick="saveServantGroupAssignments('${servantId}')" id="btn-save-serv-grp" class="px-5 py-2.5 rounded-xl bg-purple-700 text-white font-bold text-xs shadow-md hover:bg-purple-800">
+              حفظ التخصيص
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    async function saveServantGroupAssignments(servantId) {
+      const checkboxes = document.querySelectorAll('.grp-serv-check:checked');
+      const selectedGrpIds = Array.from(checkboxes).map(c => c.value);
+      const btn = document.getElementById('btn-save-serv-grp');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = 'جاري الحفظ...';
+      }
+
+      try {
+        await supabaseClient.from('group_servants').delete().eq('servant_id', servantId);
+        if (selectedGrpIds.length > 0) {
+          const rows = selectedGrpIds.map(gid => ({ servant_id: servantId, group_id: gid }));
+          const { error } = await supabaseClient.from('group_servants').insert(rows);
+          if (error) throw error;
+        }
+        document.getElementById('modal-assign-grp-box')?.remove();
+        await loadAllData();
+        renderAdminDashboard();
+        showToast('✓ تم حفظ تخصيص المجموعات للخادم', true);
+      } catch (err) {
+        alert(err.message || 'فشل حفظ تخصيص المجموعات');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerText = 'حفظ التخصيص';
+        }
+      }
+    }
+
+    // 7.3 STAGES & GROUPS MANAGER TAB
+    function renderAdminStages() {
+      const groupsWithDetails = cacheGroups.map(grp => {
+        const linkedStageIds = cacheGroupStages.filter(gs => gs.group_id === grp.id).map(gs => gs.stage_id);
+        const linkedStages = cacheStages.filter(s => linkedStageIds.includes(s.id));
+        const linkedServantIds = cacheGroupServants.filter(gs => gs.group_id === grp.id).map(gs => gs.servant_id);
+        const linkedServants = cacheProfiles.filter(p => linkedServantIds.includes(p.id));
+        const kidsCount = cacheChildren.filter(c => linkedStageIds.includes(c.stage_id) && c.is_active !== false).length;
+        return {
+          ...grp,
+          stages: linkedStages,
+          stageIds: linkedStageIds,
+          servants: linkedServants,
+          servantsCount: linkedServants.length,
+          childrenCount: kidsCount
+        };
+      });
+
+      return `
+        <div class="space-y-6 text-right">
+          <!-- Groups Management Header -->
+          <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-church-100 pb-4">
+              <div>
+                <h3 class="font-black text-lg text-slate-900 flex items-center gap-2">
+                  <span>📁</span>
+                  <span>إدارة المراحل والمجموعات</span>
+                </h3>
+                <p class="text-xs text-slate-500 mt-1 font-medium">
+                  التحكم في المجموعات، وصلاحيات وصول الخدام للمراحل (ابتدائي، إعدادي، ثانوي)، وعزل البيانات.
+                </p>
+              </div>
+              <button onclick="openGroupModal()" class="px-4 py-2.5 rounded-2xl bg-church-600 hover:bg-church-700 text-white font-bold text-xs shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 shrink-0">
+                <span>➕ إنشاء مجموعة جديدة</span>
+              </button>
+            </div>
+
+            <!-- Groups Table -->
+            <div class="overflow-x-auto">
+              <table class="w-full text-right text-xs">
+                <thead class="bg-church-50 text-slate-600 font-bold border-b border-church-200">
+                  <tr>
+                    <th class="p-3.5">اسم المجموعة</th>
+                    <th class="p-3.5">المراحل المتاحة لها</th>
+                    <th class="p-3.5 text-center">عدد الخدام</th>
+                    <th class="p-3.5 text-center">عدد المخدومين</th>
+                    <th class="p-3.5 text-center">حالة المجموعة</th>
+                    <th class="p-3.5 text-center">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-church-100 font-medium">
+                  ${groupsWithDetails.length === 0 ? `
+                    <tr>
+                      <td colspan="6" class="p-8 text-center text-slate-400">
+                        لا توجد مجموعات منشأة بعد. اضغط على "إنشاء مجموعة جديدة" لإضافة أول مجموعة.
+                      </td>
+                    </tr>
+                  ` : groupsWithDetails.map(grp => {
+                    const stageBadges = grp.stages.map(stg => {
+                      let colorClass = 'bg-amber-100 text-amber-900 border-amber-300';
+                      let icon = '🎒';
+                      if (stg.name.includes('إعدادي')) {
+                        colorClass = 'bg-blue-100 text-blue-900 border-blue-300';
+                        icon = '📖';
+                      } else if (stg.name.includes('ثانوي')) {
+                        colorClass = 'bg-purple-100 text-purple-900 border-purple-300';
+                        icon = '🎓';
+                      }
+                      return `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[11px] font-bold border ${colorClass}">${icon} ${stg.name}</span>`;
+                    }).join(' ');
+
+                    return `
+                      <tr class="hover:bg-church-50/40 transition-colors ${!grp.is_active ? 'opacity-70 bg-slate-50' : ''}">
+                        <td class="p-3.5">
+                          <div class="flex items-center gap-2.5">
+                            <div class="w-9 h-9 rounded-xl flex items-center justify-center font-bold text-base ${grp.is_active ? 'bg-church-100 text-church-900 border border-church-300' : 'bg-slate-200 text-slate-600'}">
+                              📁
+                            </div>
+                            <div>
+                              <div class="font-bold text-sm text-slate-900">${grp.name}</div>
+                              ${grp.description ? `<p class="text-[11px] text-slate-400 mt-0.5">${grp.description}</p>` : ''}
+                            </div>
+                          </div>
+                        </td>
+                        <td class="p-3.5">
+                          <div class="flex flex-wrap items-center gap-1">
+                            ${stageBadges || '<span class="text-slate-400 text-[11px] italic">بدون مراحل</span>'}
+                          </div>
+                        </td>
+                        <td class="p-3.5 text-center">
+                          <button onclick="openGroupServantsModal('${grp.id}', '${grp.name}')" class="px-3 py-1 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 font-bold transition-all text-xs" title="عرض وتعديل خدام هذه المجموعة">
+                            👥 ${grp.servantsCount} خادم
+                          </button>
+                        </td>
+                        <td class="p-3.5 text-center">
+                          <span class="px-3 py-1 rounded-full bg-blue-50 text-blue-900 border border-blue-200 font-bold text-xs">
+                            ${grp.childrenCount} مخدوم
+                          </span>
+                        </td>
+                        <td class="p-3.5 text-center">
+                          <button onclick="toggleGroupActive('${grp.id}', ${grp.is_active})" class="px-3 py-1 rounded-full text-xs font-bold transition-all ${grp.is_active ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300' : 'bg-rose-100 text-rose-800 hover:bg-rose-200 border border-rose-300'}" title="${grp.is_active ? 'إيقاف المجموعة' : 'تفعيل المجموعة'}">
+                            ${grp.is_active ? '✓ نشطة' : '✕ متوقفة'}
+                          </button>
+                        </td>
+                        <td class="p-3.5 text-center">
+                          <div class="flex items-center justify-center gap-1.5">
+                            <button onclick="openGroupModal('${grp.id}')" class="p-2 rounded-xl bg-church-50 hover:bg-church-100 text-church-800 border border-church-200 font-bold" title="تعديل اسم ومراحل المجموعة">
+                              ✏️
+                            </button>
+                            <button onclick="toggleGroupActive('${grp.id}', ${grp.is_active})" class="p-2 rounded-xl border ${grp.is_active ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}" title="${grp.is_active ? 'إيقاف المجموعة' : 'تفعيل المجموعة'}">
+                              ⚡
+                            </button>
+                            <button onclick="handleDeleteGroup('${grp.id}', '${grp.name}')" class="p-2 rounded-xl bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 border border-slate-200 font-bold" title="حذف المجموعة">
+                              🗑️
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    `;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Stages Overview & Management -->
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <!-- Add Stage Form -->
+            <div class="bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
+              <h3 class="font-black text-sm text-slate-900">➕ إضافة مرحلة إضافية</h3>
+              <form onsubmit="handleCreateStage(event)" class="space-y-3 text-right">
+                <div>
+                  <label class="block text-xs font-bold text-slate-700 mb-1">اسم المرحلة:</label>
+                  <input id="stg-name" type="text" required placeholder="مثال: رابع ابتدائي" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500" />
+                </div>
+                <div>
+                  <label class="block text-xs font-bold text-slate-700 mb-1">ترتيب الظهور:</label>
+                  <input id="stg-order" type="number" required value="${cacheStages.length + 1}" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500" />
+                </div>
+                <button type="submit" class="w-full py-2.5 rounded-xl bg-church-600 hover:bg-church-700 text-white font-bold text-xs shadow-md">
+                  إضافة المرحلة
+                </button>
+              </form>
+            </div>
+
+            <!-- Stages List -->
+            <div class="md:col-span-2 bg-white rounded-3xl p-6 border border-church-200 shadow-sm space-y-4">
+              <h3 class="font-black text-sm text-slate-900">المراحل التعليمية الأساسية (${cacheStages.length})</h3>
+              <div class="divide-y divide-church-100">
+                ${cacheStages.map(s => {
+                  const famCount = cacheFamilies.filter(f => f.stage_id === s.id).length;
+                  const kidCount = cacheChildren.filter(c => c.stage_id === s.id).length;
+                  return `
+                    <div class="py-3 flex items-center justify-between text-xs">
+                      <div>
+                        <span class="font-bold text-slate-900 text-sm">${s.name}</span>
+                        <span class="text-slate-400 mr-2">(ترتيب: ${s.sort_order}) • ${famCount} أسر • ${kidCount} أطفال</span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <button onclick="handleDeleteStage('${s.id}', ${famCount})" class="px-2.5 py-1 rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold text-[11px]">
+                          حذف
+                        </button>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
             </div>
           </div>
         </div>
       `;
+    }
+
+    // Modal to create or edit group
+    function openGroupModal(groupId) {
+      const existing = groupId ? cacheGroups.find(g => g.id === groupId) : null;
+      const linkedStageIds = existing ? cacheGroupStages.filter(gs => gs.group_id === existing.id).map(gs => gs.stage_id) : [];
+
+      const modal = document.createElement('div');
+      modal.id = 'modal-group-box';
+      modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150';
+      modal.innerHTML = `
+        <div class="bg-white w-full max-w-lg rounded-3xl p-6 border border-church-200 shadow-2xl space-y-4 text-right">
+          <div class="flex items-center justify-between border-b border-church-100 pb-3">
+            <h3 class="font-black text-base text-slate-900 flex items-center gap-2">
+              <span>📁</span>
+              <span>${existing ? 'تعديل بيانات المجموعة' : 'إنشاء مجموعة خدمة جديدة'}</span>
+            </h3>
+            <button onclick="document.getElementById('modal-group-box').remove()" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+          </div>
+
+          <form id="group-form" onsubmit="handleSaveGroup(event, '${groupId || ''}')" class="space-y-4">
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">اسم المجموعة:</label>
+              <input id="grp-input-name" type="text" required value="${existing ? existing.name : ''}" placeholder="مثال: مجموعة إعدادي وثانوي" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500 font-bold" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-1">وصف المجموعة (اختياري):</label>
+              <input id="grp-input-desc" type="text" value="${existing && existing.description ? existing.description : ''}" placeholder="مثال: خاصة بخدمة الفتيان والشباب" class="w-full text-xs px-3.5 py-2.5 rounded-xl border border-church-300 focus:ring-2 focus:ring-church-500" />
+            </div>
+
+            <div>
+              <label class="block text-xs font-bold text-slate-700 mb-2">المراحل المتاحة لهذه المجموعة (اختر مرحلة أو أكثر):</label>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                ${cacheStages.map(s => {
+                  let icon = '🎒';
+                  if (s.name.includes('إعدادي')) icon = '📖';
+                  if (s.name.includes('ثانوي')) icon = '🎓';
+                  const isChecked = linkedStageIds.includes(s.id);
+                  return `
+                    <label class="flex items-center gap-2 p-2.5 rounded-xl border border-church-200 hover:bg-church-50/70 cursor-pointer font-bold text-xs">
+                      <input type="checkbox" value="${s.id}" class="grp-stage-check rounded text-church-600 focus:ring-church-500" ${isChecked ? 'checked' : ''} />
+                      <span>${icon} ${s.name}</span>
+                    </label>
+                  `;
+                }).join('')}
+              </div>
+              <span class="text-[10px] text-slate-400 mt-1 block">يستطيع الأدمن تحديد مرحلة واحدة، مرحلتين معاً، أو المراحل الثلاثة بالكامل.</span>
+            </div>
+
+            <div class="flex items-center gap-2 pt-2">
+              <input id="grp-input-active" type="checkbox" ${!existing || existing.is_active ? 'checked' : ''} class="w-4 h-4 rounded text-church-600 focus:ring-church-500 cursor-pointer" />
+              <label for="grp-input-active" class="text-xs font-bold text-slate-700 cursor-pointer">
+                تفعيل المجموعة الآن (تظهر للخدام المصرح لهم)
+              </label>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-3 border-t border-church-100">
+              <button type="button" onclick="document.getElementById('modal-group-box').remove()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">
+                إلغاء
+              </button>
+              <button type="submit" id="btn-save-grp" class="px-5 py-2 rounded-xl bg-church-600 hover:bg-church-700 text-white font-bold text-xs shadow-md">
+                ${existing ? 'حفظ التعديلات' : 'إنشاء المجموعة'}
+              </button>
+            </div>
+          </form>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    async function handleSaveGroup(e, existingId) {
+      e.preventDefault();
+      const name = document.getElementById('grp-input-name').value.trim();
+      const description = document.getElementById('grp-input-desc').value.trim();
+      const is_active = document.getElementById('grp-input-active').checked;
+      const stageChecks = document.querySelectorAll('.grp-stage-check:checked');
+      const selectedStageIds = Array.from(stageChecks).map(c => c.value);
+
+      if (!name) {
+        alert('يرجى إدخال اسم المجموعة');
+        return;
+      }
+
+      const saveBtn = document.getElementById('btn-save-grp');
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerText = 'جاري الحفظ...';
+      }
+
+      try {
+        let groupId = existingId;
+        if (existingId) {
+          const { error } = await supabaseClient
+            .from('groups')
+            .update({ name, description, is_active, updated_at: new Date().toISOString() })
+            .eq('id', existingId);
+          if (error) throw error;
+        } else {
+          const { data, error } = await supabaseClient
+            .from('groups')
+            .insert({ name, description, is_active })
+            .select()
+            .single();
+          if (error) throw error;
+          groupId = data.id;
+        }
+
+        // Update group_stages (many-to-many)
+        await supabaseClient.from('group_stages').delete().eq('group_id', groupId);
+        if (selectedStageIds.length > 0) {
+          const rows = selectedStageIds.map(stgId => ({ group_id: groupId, stage_id: stgId }));
+          const { error: gsErr } = await supabaseClient.from('group_stages').insert(rows);
+          if (gsErr) throw gsErr;
+        }
+
+        document.getElementById('modal-group-box')?.remove();
+        await loadAllData();
+        renderAdminDashboard();
+        showToast('✓ تم حفظ إعدادات المجموعة بنجاح', true);
+      } catch (err) {
+        alert(err.message || 'فشل حفظ المجموعة');
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.innerText = 'حفظ';
+        }
+      }
+    }
+
+    async function toggleGroupActive(groupId, currentActive) {
+      try {
+        const nextState = !currentActive;
+        const { error } = await supabaseClient
+          .from('groups')
+          .update({ is_active: nextState, updated_at: new Date().toISOString() })
+          .eq('id', groupId);
+        if (error) throw error;
+
+        await loadAllData();
+        renderAdminDashboard();
+        showToast(nextState ? '✓ تم تفعيل المجموعة' : '⚠️ تم إيقاف المجموعة', true);
+      } catch (err) {
+        alert(err.message || 'فشل تعديل حالة المجموعة');
+      }
+    }
+
+    async function handleDeleteGroup(groupId, groupName) {
+      if (!confirm(`هل أنت متأكد من حذف (${groupName})؟ لن يتم حذف أي مخدوم أو خادم.`)) return;
+      try {
+        const { error } = await supabaseClient.from('groups').delete().eq('id', groupId);
+        if (error) throw error;
+
+        await loadAllData();
+        renderAdminDashboard();
+        showToast('تم حذف المجموعة', true);
+      } catch (err) {
+        alert(err.message || 'فشل حذف المجموعة');
+      }
+    }
+
+    // Modal to manage servants for a group
+    function openGroupServantsModal(groupId, groupName) {
+      const currentServantIds = cacheGroupServants.filter(gs => gs.group_id === groupId).map(gs => gs.servant_id);
+      const servants = cacheProfiles.filter(p => p.role === 'servant' && p.is_approved);
+
+      const modal = document.createElement('div');
+      modal.id = 'modal-grp-servants-box';
+      modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150';
+      modal.innerHTML = `
+        <div class="bg-white w-full max-w-lg rounded-3xl p-6 border border-church-200 shadow-2xl space-y-4 text-right flex flex-col max-h-[85vh]">
+          <div class="flex items-center justify-between border-b border-church-100 pb-3">
+            <div>
+              <h3 class="font-black text-sm text-slate-900 flex items-center gap-2">
+                <span>👥</span>
+                <span>خدام: ${groupName}</span>
+              </h3>
+              <p class="text-xs text-slate-500 mt-0.5">حدد الخدام المصرح لهم بالوصول لمراحل هذه المجموعة</p>
+            </div>
+            <button onclick="document.getElementById('modal-grp-servants-box').remove()" class="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+          </div>
+
+          <div class="flex-1 overflow-y-auto space-y-2 pr-1">
+            ${servants.length === 0 ? `
+              <p class="text-center text-slate-400 py-6 text-xs">لا يوجد خدام معتمدون حالياً</p>
+            ` : servants.map(s => {
+              const isChecked = currentServantIds.includes(s.id);
+              return `
+                <label class="flex items-center justify-between p-3 rounded-2xl border border-church-100 hover:bg-church-50/60 cursor-pointer transition-colors ${isChecked ? 'bg-purple-50/60 border-purple-300' : ''}">
+                  <div>
+                    <span class="font-bold text-xs text-slate-900 block">${s.full_name}</span>
+                    <span class="text-[11px] text-slate-400 font-mono block">${s.email}</span>
+                  </div>
+                  <input type="checkbox" value="${s.id}" class="grp-servant-check rounded text-purple-600 focus:ring-purple-500 cursor-pointer w-4 h-4" ${isChecked ? 'checked' : ''} />
+                </label>
+              `;
+            }).join('')}
+          </div>
+
+          <div class="flex items-center justify-end gap-2 pt-3 border-t border-church-100">
+            <button type="button" onclick="document.getElementById('modal-grp-servants-box').remove()" class="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100">
+              إلغاء
+            </button>
+            <button onclick="saveGroupServants('${groupId}')" id="btn-save-grp-serv" class="px-5 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-bold text-xs shadow-md">
+              حفظ الخدام
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    }
+
+    async function saveGroupServants(groupId) {
+      const checkboxes = document.querySelectorAll('.grp-servant-check:checked');
+      const selectedServantIds = Array.from(checkboxes).map(c => c.value);
+      const btn = document.getElementById('btn-save-grp-serv');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = 'جاري الحفظ...';
+      }
+
+      try {
+        await supabaseClient.from('group_servants').delete().eq('group_id', groupId);
+        if (selectedServantIds.length > 0) {
+          const rows = selectedServantIds.map(servId => ({ group_id: groupId, servant_id: servId }));
+          const { error } = await supabaseClient.from('group_servants').insert(rows);
+          if (error) throw error;
+        }
+
+        document.getElementById('modal-grp-servants-box')?.remove();
+        await loadAllData();
+        renderAdminDashboard();
+        showToast('✓ تم تحديث خدام المجموعة بنجاح', true);
+      } catch (err) {
+        alert(err.message || 'فشل حفظ خدام المجموعة');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerText = 'حفظ';
+        }
+      }
     }
 
     async function handleCreateStage(e) {
@@ -2699,6 +3215,7 @@
         if (error) throw error;
         await loadAllData();
         renderAdminDashboard();
+        showToast('✓ تمت إضافة المرحلة', true);
       } catch (err) {
         alert(err.message || 'فشل إنشاء المرحلة');
       }
@@ -2715,13 +3232,15 @@
         if (error) throw error;
         await loadAllData();
         renderAdminDashboard();
+        showToast('تم حذف المرحلة', true);
       } catch (err) {
         alert(err.message || 'فشل حذف المرحلة');
       }
     }
 
     // 7.4 FAMILIES MANAGER TAB
-    function renderAdminFamilies() {
+    function renderAdminFamilies(stats) {
+      const currentStats = stats || computeTodayStats();
       return `
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
           <!-- Add Family Form -->
@@ -2759,7 +3278,7 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               ${cacheFamilies.map(f => {
                 const kidCount = cacheChildren.filter(c => c.family_id === f.id).length;
-                const famEntry = (stats?.familiesWithPoints || []).find(item => item.family.id === f.id);
+                const famEntry = (currentStats?.familiesWithPoints || []).find(item => item.family.id === f.id);
                 const ptsToday = famEntry ? famEntry.pointsToday : 0;
                 const ptsTotal = famEntry ? famEntry.pointsTotal : 0;
 
