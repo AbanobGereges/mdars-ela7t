@@ -138,6 +138,11 @@
     var currentAdminTab = 'dashboard'; // 'dashboard' | 'users' | 'stages' | 'families' | 'children' | 'rules' | 'audit'
     var currentServantTab = 'kids'; // 'kids' | 'history'
     var isDisplayOnlyMode = false;
+    var selectedDisplayFilter = localStorage.getItem('CHURCH_DISPLAY_FILTER') || 'all';
+    var isDisplaySlideshowActive = false;
+    var displaySlideshowTimer = null;
+    var displaySlideshowCountdown = 15;
+    var displaySlideshowCountdownInterval = null;
 
     // Realtime Cache
     var cacheChildren = [];
@@ -773,9 +778,9 @@
     }
 
     // ===========================================================================
-    // 3. COMPUTATIONS (HEROES OF THE DAY & TIE BREAKER)
+    // 3. COMPUTATIONS (HEROES OF THE DAY & STRICT STAGE/GROUP ISOLATION)
     // ===========================================================================
-    function computeTodayStats() {
+    function computeTodayStats(filterStageIds = null) {
       const now = new Date();
       const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 
@@ -786,8 +791,25 @@
       const familyTotalMap = new Map();
       let grandTotalToday = 0;
 
+      // 1. Process point logs strictly for allowed stages if filter is active
       cacheLogs.forEach(log => {
         if (log.is_reverted) return;
+
+        // Stage isolation check
+        if (filterStageIds && filterStageIds.length > 0) {
+          let logStage = log.stage_id;
+          if (!logStage) {
+            if (log.child_id) {
+              const ch = cacheChildren.find(c => c.id === log.child_id);
+              logStage = ch?.stage_id;
+            } else if (log.family_id) {
+              const fam = cacheFamilies.find(f => f.id === log.family_id);
+              logStage = fam?.stage_id;
+            }
+          }
+          if (logStage && !filterStageIds.includes(logStage)) return;
+        }
+
         const pts = log.points || 0;
         const time = new Date(log.created_at).getTime();
 
@@ -816,7 +838,14 @@
         }
       });
 
-      const childrenWithPoints = cacheChildren.filter(c => c.is_active).map(c => ({
+      // 2. Strict Child Isolation: Only include children belonging to the requested stages
+      const eligibleChildren = cacheChildren.filter(c => {
+        if (!c.is_active) return false;
+        if (filterStageIds && filterStageIds.length > 0 && !filterStageIds.includes(c.stage_id)) return false;
+        return true;
+      });
+
+      const childrenWithPoints = eligibleChildren.map(c => ({
         child: c,
         pointsToday: childTodayMap.get(c.id) || 0,
         pointsTotal: childTotalMap.get(c.id) || 0,
@@ -832,9 +861,18 @@
         return (a.child.full_name || '').localeCompare(b.child.full_name || '', 'ar');
       });
 
-      const top3ChildrenToday = childrenWithPoints.slice(0, 3);
+      // Top 3 Heroes: Only children who have earned points today (> 0)
+      const kidsWithScoreToday = childrenWithPoints.filter(c => c.pointsToday > 0);
+      const top3ChildrenToday = kidsWithScoreToday.length > 0 ? kidsWithScoreToday.slice(0, 3) : [];
 
-      const familiesWithPoints = cacheFamilies.filter(f => f.is_active).map(f => {
+      // 3. Strict Family Isolation: Only include families belonging to the requested stages
+      const eligibleFamilies = cacheFamilies.filter(f => {
+        if (!f.is_active) return false;
+        if (filterStageIds && filterStageIds.length > 0 && !filterStageIds.includes(f.stage_id)) return false;
+        return true;
+      });
+
+      const familiesWithPoints = eligibleFamilies.map(f => {
         const count = cacheChildren.filter(c => c.family_id === f.id && c.is_active).length;
         return {
           family: f,
@@ -849,7 +887,8 @@
         return (a.family.name || '').localeCompare(b.family.name || '', 'ar');
       });
 
-      const top3FamiliesToday = familiesWithPoints.slice(0, 3);
+      const famsWithScoreToday = familiesWithPoints.filter(f => f.pointsToday > 0);
+      const top3FamiliesToday = famsWithScoreToday.length > 0 ? famsWithScoreToday.slice(0, 3) : familiesWithPoints.slice(0, 3);
 
       return {
         childrenWithPoints,
@@ -860,7 +899,7 @@
       };
     }
 
-    // Safety fallback: expose stats globally on window so no template or handler ever throws "ReferenceError: stats is not defined"
+    // Safety fallback: expose stats globally on window
     try {
       Object.defineProperty(window, 'stats', {
         get: function() { return computeTodayStats(); },
@@ -868,6 +907,132 @@
       });
     } catch (e) {
       window.stats = null;
+    }
+
+    // ===========================================================================
+    // DISPLAY SCREEN CONTROL HELPERS (عزل شاشات العرض والتحكم الكامل)
+    // ===========================================================================
+    function getDisplayAllowedStages() {
+      if (!selectedDisplayFilter || selectedDisplayFilter === 'all') {
+        return {
+          type: 'all',
+          stageIds: null,
+          title: 'الترتيب العام — كافة المراحل والأسر',
+          subtitle: 'عرض عام شامل لجميع المراحل والمجموعات في الخدمة',
+          group: null,
+          stage: null
+        };
+      }
+
+      if (selectedDisplayFilter.startsWith('group:')) {
+        const groupId = selectedDisplayFilter.split(':')[1];
+        const grp = cacheGroups.find(g => g.id === groupId);
+        if (!grp) {
+          return { type: 'all', stageIds: null, title: 'الترتيب العام — كافة المراحل والأسر', subtitle: '', group: null };
+        }
+        const stageIds = cacheGroupStages.filter(gs => gs.group_id === grp.id).map(gs => gs.stage_id);
+        const linkedStages = cacheStages.filter(s => stageIds.includes(s.id));
+        const stagesText = linkedStages.map(s => s.name).join(' • ') || 'بدون مراحل';
+        return {
+          type: 'group',
+          stageIds: stageIds,
+          title: `🏆 أبطال اليوم — ${grp.name}`,
+          subtitle: `✨ شاشة مستقلة لمجموعة: ${grp.name} (${stagesText}) — معزولة تماماً ✨`,
+          group: grp,
+          stages: linkedStages
+        };
+      }
+
+      if (selectedDisplayFilter.startsWith('stage:')) {
+        const stageId = selectedDisplayFilter.split(':')[1];
+        const stg = cacheStages.find(s => s.id === stageId);
+        if (!stg) {
+          return { type: 'all', stageIds: null, title: 'الترتيب العام — كافة المراحل والأسر', subtitle: '', stage: null };
+        }
+        return {
+          type: 'stage',
+          stageIds: [stg.id],
+          title: `🏆 أبطال اليوم — مرحلة ${stg.name}`,
+          subtitle: `✨ شاشة مخصصة لمرحلة: ${stg.name} فقط ✨`,
+          stage: stg
+        };
+      }
+
+      return { type: 'all', stageIds: null, title: 'الترتيب العام', subtitle: '', group: null };
+    }
+
+    function setDisplayFilter(filterId) {
+      if (isDisplaySlideshowActive) {
+        stopDisplaySlideshow();
+      }
+      selectedDisplayFilter = filterId;
+      localStorage.setItem('CHURCH_DISPLAY_FILTER', filterId);
+      renderDisplayScreen();
+    }
+
+    function lockDisplayScreenGroup() {
+      localStorage.setItem('CHURCH_DISPLAY_FILTER', selectedDisplayFilter);
+      const info = getDisplayAllowedStages();
+      const targetName = info.group?.name || info.stage?.name || 'الترتيب العام الشامل';
+      showToast(`✓ تم تثبيت هذه الشاشة/الجهاز على: (${targetName}) بنجاح! ستفتح دائماً على هذه المجموعة`, true);
+    }
+
+    function toggleDisplaySlideshow() {
+      if (isDisplaySlideshowActive) {
+        stopDisplaySlideshow();
+      } else {
+        startDisplaySlideshow();
+      }
+    }
+
+    function startDisplaySlideshow() {
+      const activeGroups = cacheGroups.filter(g => g.is_active);
+      if (activeGroups.length === 0) {
+        alert('لا توجد مجموعات نشطة للتبديل بينها. يرجى تفعيل مجموعة واحدة على الأقل من لوحة الإدارة.');
+        return;
+      }
+      isDisplaySlideshowActive = true;
+      displaySlideshowCountdown = 15;
+
+      clearInterval(displaySlideshowTimer);
+      clearInterval(displaySlideshowCountdownInterval);
+
+      displaySlideshowCountdownInterval = setInterval(() => {
+        displaySlideshowCountdown--;
+        if (displaySlideshowCountdown <= 0) {
+          displaySlideshowCountdown = 15;
+        }
+        const countdownEl = document.getElementById('slideshow-countdown-text');
+        if (countdownEl) countdownEl.textContent = displaySlideshowCountdown + 's';
+      }, 1000);
+
+      displaySlideshowTimer = setInterval(() => {
+        const active = cacheGroups.filter(g => g.is_active);
+        if (active.length === 0) return;
+        const currentGid = selectedDisplayFilter.startsWith('group:') ? selectedDisplayFilter.split(':')[1] : null;
+        const currentIdx = active.findIndex(g => g.id === currentGid);
+        const nextIdx = (currentIdx + 1) % active.length;
+        selectedDisplayFilter = 'group:' + active[nextIdx].id;
+        displaySlideshowCountdown = 15;
+        renderDisplayScreen();
+      }, 15000);
+
+      renderDisplayScreen();
+    }
+
+    function stopDisplaySlideshow() {
+      isDisplaySlideshowActive = false;
+      clearInterval(displaySlideshowTimer);
+      clearInterval(displaySlideshowCountdownInterval);
+      renderDisplayScreen();
+    }
+
+    function openGroupDisplayScreen(groupId) {
+      if (isDisplaySlideshowActive) stopDisplaySlideshow();
+      selectedDisplayFilter = 'group:' + groupId;
+      localStorage.setItem('CHURCH_DISPLAY_FILTER', selectedDisplayFilter);
+      isDisplayOnlyMode = true;
+      renderDisplayScreen();
     }
 
     // ===========================================================================
@@ -1186,82 +1351,179 @@
     }
 
     // ===========================================================================
-    // 5. DISPLAY SCREEN (TV / PROJECTOR PRESENTATION)
+    // 5. DISPLAY SCREEN (TV / PROJECTOR PRESENTATION WITH FULL GROUP CONTROL)
     // ===========================================================================
     function renderDisplayScreen() {
-      const stats = computeTodayStats();
+      const displayInfo = getDisplayAllowedStages();
+      const stats = computeTodayStats(displayInfo.stageIds);
       const root = document.getElementById('app-root');
 
       const top3 = stats.top3ChildrenToday;
       const top3Fams = stats.top3FamiliesToday;
 
+      // Filter ticker logs strictly for this group/stage
+      const tickerLogs = cacheLogs.filter(l => {
+        if (l.is_reverted) return false;
+        if (!displayInfo.stageIds || displayInfo.stageIds.length === 0) return true;
+        let lStage = l.stage_id;
+        if (!lStage) {
+          if (l.child_id) {
+            const ch = cacheChildren.find(c => c.id === l.child_id);
+            lStage = ch?.stage_id;
+          } else if (l.family_id) {
+            const fam = cacheFamilies.find(f => f.id === l.family_id);
+            lStage = fam?.stage_id;
+          }
+        }
+        return lStage ? displayInfo.stageIds.includes(lStage) : false;
+      });
+
       root.innerHTML = `
         <div class="min-h-screen bg-gradient-to-b from-slate-950 via-church-950 to-black text-white flex flex-col justify-between selection:bg-yellow-500/30">
-          <!-- Display Header -->
-          <header class="w-full bg-black/60 backdrop-blur-md px-6 py-4 border-b border-church-500/40 flex items-center justify-between z-30">
+          <!-- 1. Top Header -->
+          <header class="w-full bg-black/70 backdrop-blur-md px-6 py-3.5 border-b border-church-500/40 flex items-center justify-between z-30">
             <div class="flex items-center gap-3">
-              <img src="church-logo.jpg" onerror="this.onerror=null; this.src='church-logo.svg';" class="w-13 h-13 rounded-full border-2 border-amber-400/80 object-cover shadow-lg shrink-0" alt="شعار كنيسة العذراء وبولس" />
+              <img src="church-logo.jpg" onerror="this.onerror=null; this.src='church-logo.svg';" class="w-12 h-12 rounded-full border-2 border-amber-400/80 object-cover shadow-lg shrink-0" alt="شعار كنيسة العذراء وبولس" />
               <div>
-                <h1 class="text-2xl font-black text-church-200">خدمة مدارس الأحد</h1>
-                <p class="text-xs text-church-300 font-medium">كنيسة السيدة العذراء والشهيد بولس الرسول — الحضرة الجديدة</p>
+                <h1 class="text-xl md:text-2xl font-black text-church-200">خدمة مدارس الأحد</h1>
+                <p class="text-[11px] text-church-300 font-medium">كنيسة السيدة العذراء والشهيد بولس الرسول — الحضرة الجديدة</p>
               </div>
             </div>
 
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
               <div class="realtime-indicator-badge inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold ${isRealtimeConnected ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-300' : 'bg-amber-950/80 border border-amber-500/50 text-amber-300'}">
                 <span class="w-2 h-2 rounded-full ${isRealtimeConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}"></span>
                 <span>${isRealtimeConnected ? 'بث مباشر Realtime' : 'جاري الاتصال...'}</span>
               </div>
-              <button onclick="toggleFullscreen()" class="px-4 py-2 rounded-xl bg-church-800 text-xs font-bold border border-church-500/40 text-church-100 hover:bg-church-700">
+              <button onclick="toggleFullscreen()" class="px-3.5 py-1.5 rounded-xl bg-church-800 text-xs font-bold border border-church-500/40 text-church-100 hover:bg-church-700">
                 ⛶ ملء الشاشة
               </button>
               ${currentUser ? `
-                <button onclick="isDisplayOnlyMode=false; initApp();" class="px-4 py-2 rounded-xl bg-church-700/60 text-xs font-bold border border-church-500/30 text-white">
+                <button onclick="isDisplayOnlyMode=false; initApp();" class="px-3.5 py-1.5 rounded-xl bg-church-700/60 text-xs font-bold border border-church-500/30 text-white hover:bg-church-700">
                   ← لوحة التحكم
                 </button>
               ` : `
-                <button onclick="isDisplayOnlyMode=false; renderLogin();" class="px-4 py-2 rounded-xl bg-church-700/60 text-xs font-bold border border-church-500/30 text-white">
+                <button onclick="isDisplayOnlyMode=false; renderLogin();" class="px-3.5 py-1.5 rounded-xl bg-church-700/60 text-xs font-bold border border-church-500/30 text-white hover:bg-church-700">
                   تسجيل الدخول
                 </button>
               `}
             </div>
           </header>
 
-          <!-- Main Content -->
+          <!-- 2. Interactive Display Control Bar (التحكم الكامل في شاشة العرض وعزل المجموعات) -->
+          <div class="w-full bg-slate-900/90 border-b border-church-500/30 px-4 sm:px-6 py-2.5 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 z-20">
+            <!-- Filter Selector Pills -->
+            <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+              <span class="text-xs font-black text-amber-300 flex items-center gap-1 ml-1">
+                <span>🖥️</span>
+                <span>تخصيص الشاشة:</span>
+              </span>
+
+              <!-- All Stages Option -->
+              <button onclick="setDisplayFilter('all')" class="px-3 py-1.5 rounded-xl text-xs font-black transition-all border ${selectedDisplayFilter==='all' ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30 scale-105 border-amber-300 ring-2 ring-amber-300/40' : 'bg-white/10 text-white/80 hover:bg-white/20 border-white/10'}">
+                🌟 عام (كافة المراحل)
+              </button>
+
+              <!-- Group Buttons -->
+              ${cacheGroups.filter(g => g.is_active).map(g => {
+                const isSelected = selectedDisplayFilter === 'group:' + g.id;
+                return `
+                  <button onclick="setDisplayFilter('group:${g.id}')" class="px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 border ${isSelected ? 'bg-amber-400 text-slate-950 shadow-md shadow-amber-400/30 scale-105 border-amber-300 ring-2 ring-amber-300/40' : 'bg-church-900/90 text-amber-100 hover:bg-church-800 border-church-500/40'}">
+                    <span>📁</span>
+                    <span>${g.name}</span>
+                  </button>
+                `;
+              }).join('')}
+
+              <!-- Individual Stage Buttons -->
+              ${cacheStages.filter(s => s.is_active).map(s => {
+                let icon = '🎒';
+                if (s.name.includes('إعدادي')) icon = '📖';
+                if (s.name.includes('ثانوي')) icon = '🎓';
+                const isSelected = selectedDisplayFilter === 'stage:' + s.id;
+                return `
+                  <button onclick="setDisplayFilter('stage:${s.id}')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 border ${isSelected ? 'bg-amber-400 text-slate-950 shadow-sm scale-105 border-amber-300 ring-2 ring-amber-300/40' : 'bg-black/50 text-slate-300 hover:bg-white/10 border-white/10'}">
+                    <span>${icon}</span>
+                    <span>${s.name}</span>
+                  </button>
+                `;
+              }).join('')}
+            </div>
+
+            <!-- Slideshow & Lock Buttons -->
+            <div class="flex items-center gap-2">
+              <button onclick="toggleDisplaySlideshow()" class="px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${isDisplaySlideshowActive ? 'bg-emerald-500 text-slate-950 border-emerald-300 font-black ring-2 ring-emerald-300/50 animate-pulse' : 'bg-white/10 text-white/90 hover:bg-white/20 border-white/15'}">
+                <span>🔄</span>
+                <span>${isDisplaySlideshowActive ? 'تبديل تلقائي يعمل (' + displaySlideshowCountdown + 's)' : 'تشغيل التبديل التلقائي (Slideshow)'}</span>
+              </button>
+
+              <button onclick="lockDisplayScreenGroup()" title="تثبيت هذه المجموعة كافتراضي على هذا الجهاز/الشاشة" class="px-3 py-1.5 rounded-xl text-xs font-bold bg-white/10 hover:bg-white/20 border border-white/15 text-white flex items-center gap-1">
+                <span>📌</span>
+                <span>تثبيت للشاشة</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 3. Main Presentation Content -->
           <main class="max-w-7xl mx-auto w-full px-4 py-8 flex flex-col gap-10">
-            <!-- Top 3 Children (Global across ALL stages & families) -->
+            <!-- Top 3 Children Header -->
             <section class="text-center">
-              <div class="inline-block bg-yellow-500/20 border border-yellow-400/40 text-yellow-300 px-5 py-1.5 rounded-full text-xs font-bold shadow-lg mb-2">
-                ✨ الترتيب العام لليوم — أعلى 3 أولاد على مستوى كافة المراحل والأسر ✨
+              <div class="inline-block bg-gradient-to-r from-yellow-500/20 via-amber-500/30 to-yellow-500/20 border border-yellow-400/50 text-yellow-300 px-6 py-2 rounded-full text-xs md:text-sm font-black shadow-xl mb-3 backdrop-blur-md">
+                ${displayInfo.subtitle}
               </div>
-              <h2 class="text-3xl md:text-5xl font-black bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-400 bg-clip-text text-transparent mb-8">
-                🏆 أبطال اليوم 🏆
+              <h2 class="text-3xl md:text-6xl font-black bg-gradient-to-r from-amber-200 via-yellow-300 to-amber-400 bg-clip-text text-transparent mb-8 tracking-wide drop-shadow-md">
+                ${displayInfo.group ? `🏆 أبطال ${displayInfo.group.name} 🏆` : (displayInfo.stage ? `🏆 أبطال مرحلة ${displayInfo.stage.name} 🏆` : `🏆 أبطال اليوم 🏆`)}
               </h2>
 
               ${top3.length === 0 ? `
-                <div class="bg-slate-900/60 border border-church-500/30 rounded-3xl p-10 text-center">
-                  <div class="text-4xl mb-2">🏆</div>
-                  <h3 class="text-xl font-bold text-church-200">في انتظار تسجيل نقاط اليوم</h3>
-                  <p class="text-xs text-slate-400 mt-1">سيتوج هنا أعلى 3 أولاد فور إضافة الخدام للنقاط</p>
+                <div class="bg-slate-900/70 border border-church-500/40 rounded-3xl p-12 text-center max-w-2xl mx-auto shadow-2xl backdrop-blur-xl">
+                  <div class="text-5xl mb-3 animate-pulse">🏆</div>
+                  <h3 class="text-xl md:text-2xl font-black text-church-200">
+                    في انتظار تسجيل نقاط اليوم ${displayInfo.group ? `لمجموعة (${displayInfo.group.name})` : displayInfo.stage ? `لمرحلة (${displayInfo.stage.name})` : ''}
+                  </h3>
+                  <p class="text-xs md:text-sm text-slate-400 mt-2 font-medium">سيتوج هنا الأبطال أصحاب أعلى نقاط فور قيام الخدام بإضافتها</p>
                 </div>
               ` : `
                 <div class="flex flex-col md:flex-row items-center md:items-end justify-center gap-6 max-w-5xl mx-auto">
-                  ${top3.length > 1 ? renderHeroCard(top3[1], 2, 'order-2 md:order-1', '🥈 الثاني', 'from-slate-400 to-gray-200 text-slate-950', 'text-slate-200', 'h-28', false, stats.childrenWithPoints) : ''}
-                  ${renderHeroCard(top3[0], 1, 'order-1 md:order-2 scale-105 z-10', '🥇 الأول (بطل الخدمة)', 'from-amber-400 to-yellow-300 text-yellow-950', 'text-yellow-300', 'h-40', true, stats.childrenWithPoints)}
-                  ${top3.length > 2 ? renderHeroCard(top3[2], 3, 'order-3 md:order-3', '🥉 الثالث', 'from-amber-700 to-amber-900 text-white', 'text-amber-400', 'h-20', false, stats.childrenWithPoints) : ''}
+                  <!-- Rank 2: Silver -->
+                  ${top3.length > 1 ? renderHeroCard(top3[1], 2, 'order-2 md:order-1', '🥈 الثاني', 'from-slate-400 to-gray-200 text-slate-950', 'text-slate-200', 'h-28 md:h-36', false, stats.childrenWithPoints) : `
+                    <div class="w-full md:w-1/3 flex flex-col items-center order-2 md:order-1 opacity-50">
+                      <div class="w-full rounded-3xl p-6 border-2 border-dashed border-slate-700 bg-black/40 flex flex-col items-center text-center">
+                        <div class="w-20 h-20 rounded-full border-2 border-slate-600 flex items-center justify-center text-3xl mb-3 text-slate-400">🥈</div>
+                        <span class="text-xs font-bold text-slate-300">المركز الثاني</span>
+                        <p class="text-[11px] text-slate-500 mt-1">بانتظار تسجيل النقاط</p>
+                      </div>
+                    </div>
+                  `}
+
+                  <!-- Rank 1: Gold Champion -->
+                  ${renderHeroCard(top3[0], 1, 'order-1 md:order-2 scale-105 z-10', '🥇 الأول (بطل الخدمة)', 'from-amber-400 to-yellow-300 text-yellow-950', 'text-yellow-300', 'h-40 md:h-52', true, stats.childrenWithPoints)}
+
+                  <!-- Rank 3: Bronze -->
+                  ${top3.length > 2 ? renderHeroCard(top3[2], 3, 'order-3 md:order-3', '🥉 الثالث', 'from-amber-700 to-amber-900 text-white', 'text-amber-400', 'h-20 md:h-28', false, stats.childrenWithPoints) : `
+                    <div class="w-full md:w-1/3 flex flex-col items-center order-3 md:order-3 opacity-50">
+                      <div class="w-full rounded-3xl p-6 border-2 border-dashed border-slate-700 bg-black/40 flex flex-col items-center text-center">
+                        <div class="w-20 h-20 rounded-full border-2 border-slate-600 flex items-center justify-center text-3xl mb-3 text-slate-400">🥉</div>
+                        <span class="text-xs font-bold text-slate-300">المركز الثالث</span>
+                        <p class="text-[11px] text-slate-500 mt-1">بانتظار تسجيل النقاط</p>
+                      </div>
+                    </div>
+                  `}
                 </div>
               `}
             </section>
 
-            <!-- Top 3 Families Champions -->
+            <!-- Top 3 Families Champions (Strictly isolated) -->
             <section class="pt-6 border-t border-church-800/50">
               <div class="text-center mb-6">
-                <h3 class="text-2xl md:text-3xl font-black text-white">🏠 أبطال الأسر 🏠</h3>
-                <p class="text-xs text-church-200/70 mt-1">مجموع نقاط أطفال كل أسرة المسجلة خلال اليوم</p>
+                <h3 class="text-2xl md:text-3xl font-black text-white">
+                  🏠 أبطال الأسر ${displayInfo.group ? `(${displayInfo.group.name})` : displayInfo.stage ? `(${displayInfo.stage.name})` : ''} 🏠
+                </h3>
+                <p class="text-xs text-church-200/70 mt-1">مجموع نقاط أطفال كل أسرة المسجلة خلال اليوم لهذه المجموعة فقط</p>
               </div>
 
               ${top3Fams.length === 0 ? `
-                <div class="text-center text-slate-500 text-xs py-4">لا توجد أسر نشطة اليوم</div>
+                <div class="text-center text-slate-500 text-xs py-4">لا توجد أسر مسجلة بنقاط اليوم لهذه المجموعة</div>
               ` : `
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-5 max-w-5xl mx-auto">
                   ${top3Fams.map((f, i) => `
@@ -1281,10 +1543,12 @@
               `}
             </section>
 
-            <!-- All Families Leaderboard -->
+            <!-- All Families Leaderboard (Strictly isolated) -->
             ${stats.familiesWithPoints.length > 3 ? `
               <section class="pt-6 border-t border-church-800/50 max-w-4xl mx-auto w-full">
-                <h4 class="text-lg font-bold text-church-200 mb-3 text-center">📊 الترتيب العام لكافة الأسر</h4>
+                <h4 class="text-lg font-bold text-church-200 mb-3 text-center">
+                  📊 الترتيب العام للأسر ${displayInfo.group ? `(${displayInfo.group.name})` : ''}
+                </h4>
                 <div class="bg-slate-900/60 rounded-2xl border border-church-800 overflow-hidden text-xs">
                   <table class="w-full text-right">
                     <thead class="bg-black/50 text-slate-400 font-bold border-b border-church-800">
@@ -1313,12 +1577,14 @@
             ` : ''}
           </main>
 
-          <!-- Ticker Footer -->
-          <footer class="w-full bg-black/60 backdrop-blur-md border-t border-church-500/30 p-2 text-xs overflow-hidden">
+          <!-- 4. Live Ticker (Strictly filtered to this group) -->
+          <footer class="w-full bg-black/70 backdrop-blur-md border-t border-church-500/30 p-2 text-xs overflow-hidden">
             <div class="max-w-7xl mx-auto flex items-center gap-4 overflow-x-auto no-scrollbar">
-              <span class="bg-red-600 text-white px-2 py-0.5 rounded-full font-black text-[11px] shrink-0 animate-pulse">● مباشر</span>
-              ${cacheLogs.slice(0, 8).map(l => `
-                <div class="flex items-center gap-2 bg-church-950/80 border border-church-700/50 px-3 py-1 rounded-xl shrink-0">
+              <span class="bg-red-600 text-white px-2.5 py-0.5 rounded-full font-black text-[11px] shrink-0 animate-pulse">● مباشر</span>
+              ${tickerLogs.length === 0 ? `
+                <span class="text-slate-400 text-xs">لا توجد عمليات مسجلة اليوم لهذه المجموعة بعد</span>
+              ` : tickerLogs.slice(0, 10).map(l => `
+                <div class="flex items-center gap-2 bg-church-950/90 border border-church-700/50 px-3 py-1 rounded-xl shrink-0">
                   <span class="font-bold text-church-300">${l.servant?.full_name || 'خادم'}:</span>
                   <span class="text-white font-bold">${l.child?.full_name || 'مخدوم'}</span>
                   <span class="font-black ${l.points>0?'text-emerald-400':'text-rose-400'}">${l.points>0?'+'+l.points:l.points}</span>
@@ -2899,6 +3165,9 @@
                         </td>
                         <td class="p-3.5 text-center">
                           <div class="flex items-center justify-center gap-1.5">
+                            <button onclick="openGroupDisplayScreen('${grp.id}')" class="p-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold" title="تشغيل شاشة العرض TV لهذه المجموعة مباشرة">
+                              🖥️
+                            </button>
                             <button onclick="openGroupModal('${grp.id}')" class="p-2 rounded-xl bg-church-50 hover:bg-church-100 text-church-800 border border-church-200 font-bold" title="تعديل اسم ومراحل المجموعة">
                               ✏️
                             </button>
